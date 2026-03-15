@@ -23,38 +23,51 @@ CodeForge is a free, open-source platform where you learn programming by buildin
 - Redis 7+
 - Docker (for sandbox execution)
 
-### Setup
+### One-Command Setup (Recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/codeforge/codeforge.git
 cd codeforge
 
-# Install dependencies
-npm install
+# Run the setup script — installs deps, starts DB, seeds data, and launches dev server
+./scripts/dev-setup.sh
+```
 
-# Copy environment variables
+This single script handles everything:
+1. Checks prerequisites (Node.js 20+, Docker)
+2. Installs npm dependencies
+3. Creates `.env` with a generated secret
+4. Starts PostgreSQL and Redis via Docker Compose
+5. Applies the database schema and seeds it with projects/badges
+6. Starts the Next.js dev server at `http://localhost:3000`
+
+**Options:**
+- `./scripts/dev-setup.sh --skip-db` — Skip Docker/database setup (use if you already have PostgreSQL and Redis running)
+- `npm run setup` — Same as running the script directly
+- `npm run setup:skip-db` — Same as `--skip-db`
+
+### Manual Setup
+
+```bash
+npm install
 cp .env.example .env
 # Edit .env with your database credentials and OAuth keys
-
-# Generate Prisma client and push schema
 npm run db:generate
 npm run db:push
-
-# Seed the database
 npm run db:seed
-
-# Start development server
 npm run dev
 ```
 
-### Docker Compose (Recommended)
+### Docker Compose Only (Services)
 
 ```bash
-docker-compose up -d
-```
+# Start just PostgreSQL and Redis
+docker compose up -d postgres redis
 
-This starts the app, PostgreSQL, and Redis.
+# Or start everything including the app
+docker compose up -d
+```
 
 ## Project Structure
 

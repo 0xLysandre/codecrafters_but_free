@@ -10,7 +10,9 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "npx tsx prisma/seed.ts"
+    "db:seed": "npx tsx prisma/seed.ts",
+    "setup": "bash scripts/dev-setup.sh",
+    "setup:skip-db": "bash scripts/dev-setup.sh --skip-db"
   },
   "dependencies": {
     "next": "^14.2.0",
