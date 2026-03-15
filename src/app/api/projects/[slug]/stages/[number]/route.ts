@@ -102,9 +102,9 @@ export async function GET(
       title: stage.title,
       narrative: stage.narrative,
       taskDescription: stage.taskDescription,
-      hints: stage.hints as unknown as StageInfo["hints"],
-      referenceMaterial: stage.referenceMaterial as unknown as StageInfo["referenceMaterial"],
-      conceptsTaught: stage.conceptsTaught,
+      hints: JSON.parse(stage.hints) as StageInfo["hints"],
+      referenceMaterial: stage.referenceMaterial ? JSON.parse(stage.referenceMaterial) as StageInfo["referenceMaterial"] : null,
+      conceptsTaught: JSON.parse(stage.conceptsTaught) as string[],
       isCompleted,
       isLocked: false,
     };
@@ -113,7 +113,7 @@ export async function GET(
       stage: stageInfo,
       starterCode: stage.starterCode.map((sc) => ({
         language: sc.language,
-        files: sc.files,
+        files: JSON.parse(sc.files),
         buildCommand: sc.buildCommand,
       })),
     });

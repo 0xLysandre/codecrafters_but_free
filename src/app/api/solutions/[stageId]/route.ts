@@ -93,7 +93,7 @@ export async function GET(
       id: sol.id,
       user: sol.user,
       language: sol.language,
-      code: sol.code,
+      code: JSON.parse(sol.code),
       description: sol.description,
       upvotes: sol.upvotes,
       userVote: (sol as Record<string, unknown>).votes
@@ -184,7 +184,7 @@ export async function POST(
         userId,
         stageId: params.stageId,
         language,
-        code,
+        code: JSON.stringify(code),
         description,
       },
       include: {
@@ -200,7 +200,7 @@ export async function POST(
           id: solution.id,
           user: solution.user,
           language: solution.language,
-          code: solution.code,
+          code: JSON.parse(solution.code),
           description: solution.description,
           upvotes: solution.upvotes,
           createdAt: solution.createdAt.toISOString(),

@@ -44,7 +44,7 @@ export async function awardStageCompletion(
       language,
       hintsUsed,
       attempts,
-      finalCode: code,
+      finalCode: JSON.stringify(code),
       executionTimeMs,
     },
   });
@@ -241,7 +241,7 @@ async function checkBadges(
   });
 
   for (const badge of badges) {
-    const config = badge.criteriaConfig as { projectId: string };
+    const config = JSON.parse(badge.criteriaConfig) as { projectId: string };
     if (config.projectId !== projectId) continue;
 
     const progress = await prisma.userProgress.findFirst({
@@ -271,7 +271,7 @@ async function checkBadges(
   });
 
   for (const badge of metaBadges) {
-    const config = badge.criteriaConfig as Record<string, unknown>;
+    const config = JSON.parse(badge.criteriaConfig) as Record<string, unknown>;
 
     if (config.type === "multi_language") {
       // Check if any project completed in 3+ languages

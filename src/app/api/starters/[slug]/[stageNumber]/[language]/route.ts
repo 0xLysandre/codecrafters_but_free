@@ -69,7 +69,7 @@ export async function GET(
     return NextResponse.json({
       starterCode: {
         language: starterCode.language,
-        files: starterCode.files,
+        files: JSON.parse(starterCode.files),
         buildCommand: starterCode.buildCommand,
       },
     });

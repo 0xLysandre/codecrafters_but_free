@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
         userId,
         stageId: stage.id,
         language,
-        files,
+        files: JSON.stringify(files),
         isPassing: result.passed,
       },
     });

@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
         difficulty: project.difficulty as ProjectSummary["difficulty"],
         estimatedHours: project.estimatedHours,
         icon: project.icon,
-        concepts: project.concepts,
+        concepts: JSON.parse(project.concepts) as string[],
         stageCount: project.stages.length,
         completedStages: completionCounts.get(project.id) ?? 0,
         supportedLanguages: [],

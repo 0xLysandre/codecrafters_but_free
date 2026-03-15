@@ -77,11 +77,11 @@ export async function GET(
         title: stage.title,
         narrative: isLocked ? "" : stage.narrative,
         taskDescription: isLocked ? "" : stage.taskDescription,
-        hints: isLocked ? [] : (stage.hints as unknown as StageInfo["hints"]),
+        hints: isLocked ? [] : (JSON.parse(stage.hints) as StageInfo["hints"]),
         referenceMaterial: isLocked
           ? null
-          : (stage.referenceMaterial as unknown as StageInfo["referenceMaterial"]),
-        conceptsTaught: stage.conceptsTaught,
+          : (stage.referenceMaterial ? JSON.parse(stage.referenceMaterial) as StageInfo["referenceMaterial"] : null),
+        conceptsTaught: JSON.parse(stage.conceptsTaught) as string[],
         isCompleted,
         isLocked,
       };
@@ -96,7 +96,7 @@ export async function GET(
         difficulty: project.difficulty,
         estimatedHours: project.estimatedHours,
         icon: project.icon,
-        concepts: project.concepts,
+        concepts: JSON.parse(project.concepts) as string[],
         supportedLanguages,
         prerequisites: project.prerequisites.map((p) => ({
           id: p.prerequisite.id,

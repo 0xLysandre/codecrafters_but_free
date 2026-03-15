@@ -3,12 +3,12 @@
 # CodeForge — Local Development Setup
 #
 # Usage:
-#   ./scripts/dev-setup.sh          # Full setup (install, db, seed, run)
-#   ./scripts/dev-setup.sh --skip-db  # Skip database setup (just install & run)
+#   ./scripts/dev-setup.sh              # SQLite setup (zero dependencies beyond Node.js)
+#   ./scripts/dev-setup.sh --postgres   # Use PostgreSQL + Redis via Docker Compose
 #
 # Prerequisites:
-#   - Node.js 20+
-#   - Docker & Docker Compose (for PostgreSQL and Redis)
+#   - Node.js 18+
+#   - Docker (only if using --postgres)
 #
 set -euo pipefail
 
@@ -20,16 +20,16 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 log()  { echo -e "${GREEN}[CodeForge]${NC} $*"; }
 warn() { echo -e "${YELLOW}[CodeForge]${NC} $*"; }
 err()  { echo -e "${RED}[CodeForge]${NC} $*" >&2; }
 
-SKIP_DB=false
+USE_POSTGRES=false
 for arg in "$@"; do
   case "$arg" in
-    --skip-db) SKIP_DB=true ;;
+    --postgres) USE_POSTGRES=true ;;
   esac
 done
 
@@ -38,7 +38,7 @@ done
 log "Checking prerequisites..."
 
 if ! command -v node &>/dev/null; then
-  err "Node.js is not installed. Please install Node.js 20+ from https://nodejs.org"
+  err "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org"
   exit 1
 fi
 
@@ -49,32 +49,25 @@ if [ "$NODE_VERSION" -lt 18 ]; then
 fi
 log "Node.js $(node -v) ✓"
 
-if ! command -v npm &>/dev/null; then
-  err "npm is not installed"
-  exit 1
-fi
-log "npm $(npm -v) ✓"
-
-if [ "$SKIP_DB" = false ]; then
+if [ "$USE_POSTGRES" = true ]; then
   if ! command -v docker &>/dev/null; then
-    warn "Docker not found. Database services won't be started automatically."
-    warn "Make sure PostgreSQL and Redis are running, then re-run with --skip-db"
-    SKIP_DB=true
-  else
-    log "Docker $(docker --version | awk '{print $3}' | tr -d ',') ✓"
+    err "Docker is required for --postgres mode but was not found"
+    err "Either install Docker or run without --postgres to use SQLite"
+    exit 1
   fi
+  log "Docker $(docker --version | awk '{print $3}' | tr -d ',') ✓"
 fi
 
 # ── Install dependencies ────────────────────────────────────────────
 
 log "Installing dependencies..."
-npm install --silent 2>&1 | tail -3
+npm install 2>&1 | tail -3
 log "Dependencies installed ✓"
 
 # ── Set up environment variables ────────────────────────────────────
 
 if [ ! -f .env ]; then
-  log "Creating .env from .env.example..."
+  log "Creating .env file..."
   cp .env.example .env
 
   # Generate a random secret for NextAuth
@@ -84,20 +77,18 @@ if [ ! -f .env ]; then
   else
     sed -i "s/your-secret-here-change-in-production/$SECRET/" .env
   fi
-  log ".env created with generated NEXTAUTH_SECRET ✓"
+
+  log ".env created ✓"
 else
   log ".env already exists ✓"
 fi
 
-# ── Start database services ─────────────────────────────────────────
+# ── Start database services (PostgreSQL mode only) ──────────────────
 
-if [ "$SKIP_DB" = false ]; then
+if [ "$USE_POSTGRES" = true ]; then
   log "Starting PostgreSQL and Redis via Docker Compose..."
-
-  # Only start db services, not the app container
   docker compose up -d postgres redis 2>&1 | tail -5
 
-  # Wait for PostgreSQL to be ready
   log "Waiting for PostgreSQL to be ready..."
   RETRIES=30
   until docker compose exec -T postgres pg_isready -U postgres &>/dev/null || [ $RETRIES -eq 0 ]; do
@@ -111,6 +102,8 @@ if [ "$SKIP_DB" = false ]; then
   fi
   log "PostgreSQL ready ✓"
   log "Redis ready ✓"
+else
+  log "Using SQLite — no external services needed"
 fi
 
 # ── Set up database ─────────────────────────────────────────────────
@@ -129,12 +122,18 @@ log "Database seeded ✓"
 
 # ── Start development server ────────────────────────────────────────
 
+DB_MODE="SQLite"
+if [ "$USE_POSTGRES" = true ]; then
+  DB_MODE="PostgreSQL + Redis"
+fi
+
 echo ""
 echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║                                                  ║${NC}"
 echo -e "${CYAN}║   ${GREEN}CodeForge is ready!${CYAN}                            ║${NC}"
 echo -e "${CYAN}║                                                  ║${NC}"
-echo -e "${CYAN}║   ${NC}Starting dev server at ${GREEN}http://localhost:3000${CYAN}   ║${NC}"
+echo -e "${CYAN}║   ${NC}Database:  ${GREEN}${DB_MODE}$(printf '%*s' $((25 - ${#DB_MODE})) '')${CYAN}║${NC}"
+echo -e "${CYAN}║   ${NC}Server:   ${GREEN}http://localhost:3000${CYAN}              ║${NC}"
 echo -e "${CYAN}║                                                  ║${NC}"
 echo -e "${CYAN}║   ${NC}Press ${YELLOW}Ctrl+C${NC} to stop${CYAN}                           ║${NC}"
 echo -e "${CYAN}║                                                  ║${NC}"

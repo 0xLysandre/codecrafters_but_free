@@ -143,7 +143,7 @@ export async function POST(
           language,
           hintsUsed,
           attempts,
-          finalCode: finalCode ?? undefined,
+          finalCode: finalCode ? JSON.stringify(finalCode) : undefined,
           executionTimeMs,
         },
       });

@@ -51,7 +51,12 @@ export async function GET(
       },
     });
 
-    return NextResponse.json({ snapshots });
+    const parsed = snapshots.map((s) => ({
+      ...s,
+      files: JSON.parse(s.files),
+    }));
+
+    return NextResponse.json({ snapshots: parsed });
   } catch (error) {
     console.error("Failed to fetch snapshots:", error);
     return NextResponse.json(
@@ -107,7 +112,7 @@ export async function POST(
         userId,
         stageId: params.stageId,
         language,
-        files,
+        files: JSON.stringify(files),
         isPassing,
       },
       select: {
@@ -119,7 +124,7 @@ export async function POST(
       },
     });
 
-    return NextResponse.json({ snapshot }, { status: 201 });
+    return NextResponse.json({ snapshot: { ...snapshot, files: JSON.parse(snapshot.files) } }, { status: 201 });
   } catch (error) {
     console.error("Failed to save snapshot:", error);
     return NextResponse.json(
