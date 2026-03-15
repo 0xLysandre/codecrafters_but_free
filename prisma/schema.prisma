@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Difficulty {
+  beginner
+  intermediate
+  advanced
+  expert
+}
+
+enum CriteriaType {
+  project_complete
+  meta
+}
+
+model User {
+  id                     String    @id @default(uuid())
+  username               String    @unique
+  email                  String    @unique
+  passwordHash           String?   @map("password_hash")
+  oauthProvider          String?   @map("oauth_provider")
+  oauthId                String?   @map("oauth_id")
+  avatarUrl              String?   @map("avatar_url")
+  xp                     Int       @default(0)
+  level                  Int       @default(1)
+  currentStreak          Int       @default(0) @map("current_streak")
+  longestStreak          Int       @default(0) @map("longest_streak")
+  streakLastActiveDate   DateTime? @map("streak_last_active_date") @db.Date
+  streakFreezesRemaining Int       @default(2) @map("streak_freezes_remaining")
+  isProfilePublic        Boolean   @default(true) @map("is_profile_public")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  progress           UserProgress[]
+  stageCompletions   StageCompletion[]
+  codeSnapshots      CodeSnapshot[]
+  badges             UserBadge[]
+  communitySolutions CommunitySolution[]
+  solutionVotes      SolutionVote[]
+  dailyActivity      DailyActivity[]
+
+  @@map("users")
+}
+
+model Project {
+  id            String     @id
+  title         String
+  slug          String     @unique
+  description   String
+  difficulty    Difficulty
+  estimatedHours Int       @map("estimated_hours")
+  icon          String
+  displayOrder  Int        @map("display_order")
+  isPublished   Boolean    @default(true) @map("is_published")
+  concepts      String[]
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  stages        Stage[]
+  prerequisites ProjectPrerequisite[] @relation("project")
+  requiredBy    ProjectPrerequisite[] @relation("prerequisite")
+  progress      UserProgress[]
+
+  @@map("projects")
+}
+
+model ProjectPrerequisite {
+  projectId      String  @map("project_id")
+  prerequisiteId String  @map("prerequisite_id")
+
+  project      Project @relation("project", fields: [projectId], references: [id])
+  prerequisite Project @relation("prerequisite", fields: [prerequisiteId], references: [id])
+
+  @@id([projectId, prerequisiteId])
+  @@map("project_prerequisites")
+}
+
+model Stage {
+  id                String  @id
+  projectId         String  @map("project_id")
+  number            Int
+  title             String
+  narrative         String
+  taskDescription   String  @map("task_description")
+  referenceMaterial Json?   @map("reference_material")
+  hints             Json    // array of { level, text }
+  testConfig        Json    @map("test_config")
+  conceptsTaught    String[] @map("concepts_taught")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  project          Project          @relation(fields: [projectId], references: [id])
+  starterCode      StarterCode[]
+  completions      StageCompletion[]
+  codeSnapshots    CodeSnapshot[]
+  solutions        CommunitySolution[]
+
+  @@unique([projectId, number])
+  @@map("stages")
+}
+
+model StarterCode {
+  id           String  @id @default(uuid())
+  stageId      String  @map("stage_id")
+  language     String
+  files        Json    // { filename: content }
+  buildCommand String? @map("build_command")
+
+  stage Stage @relation(fields: [stageId], references: [id])
+
+  @@unique([stageId, language])
+  @@map("starter_code")
+}
+
+model UserProgress {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  projectId   String    @map("project_id")
+  language    String
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  user    User    @relation(fields: [userId], references: [id])
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@unique([userId, projectId, language])
+  @@map("user_progress")
+}
+
+model StageCompletion {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  stageId         String   @map("stage_id")
+  language        String
+  completedAt     DateTime @default(now()) @map("completed_at")
+  hintsUsed       Int      @default(0) @map("hints_used")
+  attempts        Int      @default(1)
+  finalCode       Json?    @map("final_code")
+  executionTimeMs Int?     @map("execution_time_ms")
+
+  user  User  @relation(fields: [userId], references: [id])
+  stage Stage @relation(fields: [stageId], references: [id])
+
+  @@unique([userId, stageId, language])
+  @@map("stage_completions")
+}
+
+model CodeSnapshot {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  stageId   String   @map("stage_id")
+  language  String
+  files     Json
+  isPassing Boolean  @default(false) @map("is_passing")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User  @relation(fields: [userId], references: [id])
+  stage Stage @relation(fields: [stageId], references: [id])
+
+  @@map("code_snapshots")
+}
+
+model Badge {
+  id             String       @id
+  title          String
+  description    String
+  icon           String
+  criteriaType   CriteriaType @map("criteria_type")
+  criteriaConfig Json         @map("criteria_config")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  users UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  userId   String   @map("user_id")
+  badgeId  String   @map("badge_id")
+  earnedAt DateTime @default(now()) @map("earned_at")
+
+  user  User  @relation(fields: [userId], references: [id])
+  badge Badge @relation(fields: [badgeId], references: [id])
+
+  @@id([userId, badgeId])
+  @@map("user_badges")
+}
+
+model CommunitySolution {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  stageId     String   @map("stage_id")
+  language    String
+  code        Json
+  description String?
+  upvotes     Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  isFlagged   Boolean  @default(false) @map("is_flagged")
+
+  user  User           @relation(fields: [userId], references: [id])
+  stage Stage          @relation(fields: [stageId], references: [id])
+  votes SolutionVote[]
+
+  @@map("community_solutions")
+}
+
+model SolutionVote {
+  userId     String @map("user_id")
+  solutionId String @map("solution_id")
+  vote       Int    @db.SmallInt // 1 or -1
+
+  user     User              @relation(fields: [userId], references: [id])
+  solution CommunitySolution @relation(fields: [solutionId], references: [id])
+
+  @@id([userId, solutionId])
+  @@map("solution_votes")
+}
+
+model DailyActivity {
+  userId          String @map("user_id")
+  date            DateTime @db.Date
+  stagesCompleted Int    @default(0) @map("stages_completed")
+  testsRun        Int    @default(0) @map("tests_run")
+  xpEarned        Int    @default(0) @map("xp_earned")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([userId, date])
+  @@map("daily_activity")
+}

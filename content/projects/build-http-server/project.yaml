@@ -1,0 +1,1548 @@
+project:
+  id: "build-http-server"
+  title: "Build Your Own HTTP Server"
+  slug: "http-server"
+  icon: "globe"
+  difficulty: "intermediate"
+  estimated_hours: 14
+  prerequisites:
+    - "build-echo-server"
+  description: |
+    Build an HTTP/1.1 server from raw TCP sockets. HTTP is the protocol that
+    powers the web — every time you load a webpage, your browser sends an HTTP
+    request and receives an HTTP response. By building a server that speaks HTTP,
+    you'll understand exactly what happens between typing a URL and seeing a page.
+    You'll parse request lines, handle headers, serve files, implement routing,
+    and add features like compression and keep-alive connections.
+  concepts:
+    - "HTTP/1.1 protocol"
+    - "Request parsing"
+    - "Response formatting"
+    - "Static file serving"
+    - "Content types and MIME"
+    - "URL routing"
+    - "Transfer encodings"
+    - "Connection management"
+  supported_languages:
+    - python
+    - javascript
+
+  stages:
+    # ──────────────────────────────────────────────
+    # Stage 1: Bind to a Port
+    # ──────────────────────────────────────────────
+    - id: "http-bind-port"
+      number: 1
+      title: "Bind to a Port"
+      narrative: |
+        An HTTP server is, at its core, a TCP server that speaks the HTTP protocol.
+        Everything you learned building the echo server applies here — the socket,
+        bind, listen dance is identical.
+
+        The standard port for HTTP is 80, but that requires root privileges on most
+        systems. During development, high-numbered ports like 4221 are conventional.
+        Real web servers often bind to port 8080 or 3000 during development.
+
+        We're starting from TCP because HTTP is a text-based protocol layered on
+        top of TCP. There's no magic — it's just structured text sent over the same
+        sockets you already know.
+      task: |
+        Create a TCP server that binds to port 4221 on localhost and starts
+        listening for connections. This is identical to the echo server's first
+        stage, but this time you're building the foundation for an HTTP server.
+
+        The test will verify that something is listening on port 4221.
+      concepts_taught:
+        - "HTTP servers are TCP servers"
+        - "Development port conventions"
+      hints:
+        - level: 1
+          text: |
+            This is the same as the echo server's first stage. Create a socket,
+            bind to port 4221, and listen.
+        - level: 2
+          text: |
+            If you completed the echo server, you can start with that code.
+            In Python: socket → bind → listen. In JavaScript: net.createServer()
+            → listen().
+        - level: 3
+          text: |
+            Python:
+              import socket
+              s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+              s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+              s.bind(('127.0.0.1', 4221))
+              s.listen(5)
+              # Keep running...
+
+            JavaScript:
+              const net = require('net');
+              const server = net.createServer();
+              server.listen(4221, '127.0.0.1');
+      reference_material:
+        title: "HTTP: A Protocol on Top of TCP"
+        body: |
+          HTTP (Hypertext Transfer Protocol) is an application-layer protocol
+          that uses TCP as its transport. The relationship is:
+
+          ```
+          ┌─────────────────────────┐
+          │  HTTP (your logic)      │  Application layer
+          ├─────────────────────────┤
+          │  TCP (sockets)          │  Transport layer
+          ├─────────────────────────┤
+          │  IP (routing)           │  Network layer
+          ├─────────────────────────┤
+          │  Ethernet/WiFi          │  Link layer
+          └─────────────────────────┘
+          ```
+
+          Your HTTP server will:
+          1. Accept TCP connections (same as echo server)
+          2. Read raw bytes from the socket
+          3. Parse those bytes as HTTP requests
+          4. Construct HTTP responses as text
+          5. Write the response bytes to the socket
+
+          The key difference from the echo server: instead of echoing bytes back,
+          you'll parse structured requests and generate structured responses.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 2: Parse the Request Line
+    # ──────────────────────────────────────────────
+    - id: "http-parse-request-line"
+      number: 2
+      title: "Parse the Request Line"
+      narrative: |
+        Every HTTP request starts with a **request line** — a single line
+        containing three pieces of information:
+
+        ```
+        GET /index.html HTTP/1.1\r\n
+        ```
+
+        1. **Method** — What action to perform (`GET`, `POST`, `PUT`, `DELETE`, etc.)
+        2. **Path** — The resource being requested (`/index.html`, `/api/users`)
+        3. **Version** — The HTTP version (`HTTP/1.1`)
+
+        These are separated by spaces and terminated by `\r\n` (CRLF — carriage
+        return followed by line feed). HTTP is very specific about using CRLF, not
+        just `\n`.
+
+        For this stage, you need to accept a connection, read the request line,
+        and parse out the method and path. You'll respond to every request with a
+        simple `200 OK` response — the simplest valid HTTP response.
+      task: |
+        Accept an HTTP connection, read and parse the request line, and send back
+        a minimal valid HTTP response:
+
+        ```
+        HTTP/1.1 200 OK\r\n\r\n
+        ```
+
+        The response consists of the status line followed by an empty line (double
+        CRLF), indicating no headers and no body.
+
+        Your server should handle at least one request, but ideally loop to handle
+        multiple requests sequentially.
+
+        The test will send a `GET / HTTP/1.1` request using curl and verify that
+        it receives a 200 status code.
+      concepts_taught:
+        - "HTTP request format"
+        - "Request line parsing"
+        - "HTTP response format"
+        - "CRLF line endings"
+      hints:
+        - level: 1
+          text: |
+            Read data from the socket, find the first `\r\n` to get the request
+            line, then split it on spaces to get method, path, and version.
+        - level: 2
+          text: |
+            The minimal valid response is just `HTTP/1.1 200 OK\r\n\r\n`. Send
+            exactly this string as bytes. The double CRLF marks the end of headers
+            (even though there are none).
+        - level: 3
+          text: |
+            Python:
+              conn, addr = server.accept()
+              data = conn.recv(4096).decode()
+              request_line = data.split('\r\n')[0]
+              method, path, version = request_line.split(' ')
+              response = "HTTP/1.1 200 OK\r\n\r\n"
+              conn.sendall(response.encode())
+              conn.close()
+
+            JavaScript:
+              const server = net.createServer((socket) => {
+                socket.on('data', (data) => {
+                  const requestLine = data.toString().split('\r\n')[0];
+                  const [method, path, version] = requestLine.split(' ');
+                  socket.write('HTTP/1.1 200 OK\r\n\r\n');
+                  socket.end();
+                });
+              });
+      reference_material:
+        title: "HTTP Request and Response Format"
+        body: |
+          **HTTP Request structure**:
+          ```
+          METHOD PATH VERSION\r\n
+          Header-Name: Header-Value\r\n
+          Header-Name: Header-Value\r\n
+          \r\n
+          [optional body]
+          ```
+
+          **HTTP Response structure**:
+          ```
+          VERSION STATUS-CODE REASON-PHRASE\r\n
+          Header-Name: Header-Value\r\n
+          \r\n
+          [optional body]
+          ```
+
+          **Common status codes**:
+          | Code | Meaning |
+          |------|---------|
+          | 200 | OK |
+          | 201 | Created |
+          | 301 | Moved Permanently |
+          | 400 | Bad Request |
+          | 404 | Not Found |
+          | 500 | Internal Server Error |
+
+          **CRLF**: HTTP uses `\r\n` (bytes 0x0D 0x0A) as the line terminator.
+          This is a legacy from the teletype era. The blank line (double CRLF)
+          separates headers from the body.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 3: Parse Headers
+    # ──────────────────────────────────────────────
+    - id: "http-parse-headers"
+      number: 3
+      title: "Parse Headers"
+      narrative: |
+        After the request line come the **headers** — key-value pairs that carry
+        metadata about the request. Each header is on its own line:
+
+        ```
+        GET / HTTP/1.1\r\n
+        Host: localhost:4221\r\n
+        User-Agent: curl/7.68.0\r\n
+        Accept: */*\r\n
+        \r\n
+        ```
+
+        Headers tell the server things like:
+        - **Host**: Which domain the client is requesting (essential for virtual
+          hosting, where one server hosts multiple websites)
+        - **User-Agent**: What software is making the request
+        - **Accept**: What content types the client can handle
+        - **Content-Length**: How many bytes are in the request body
+        - **Connection**: Whether to keep the connection alive
+
+        Header names are case-insensitive (`Content-Type` = `content-type`), but
+        values are case-sensitive.
+      task: |
+        Extend your server to parse HTTP headers. After parsing the request line,
+        read all headers up to the empty line.
+
+        To demonstrate that you're parsing headers correctly, implement a simple
+        behavior: if the request path is `/echo/<string>`, respond with that
+        string as the body, with appropriate headers:
+
+        ```
+        HTTP/1.1 200 OK\r\n
+        Content-Type: text/plain\r\n
+        Content-Length: <length>\r\n
+        \r\n
+        <string>
+        ```
+
+        Also implement `/user-agent`: respond with the value of the `User-Agent`
+        header as the body.
+
+        For any other path, respond with `200 OK` and no body (for now).
+
+        The test will request `/echo/hello` and `/user-agent` and verify the
+        responses.
+      concepts_taught:
+        - "HTTP headers"
+        - "Content-Type and Content-Length"
+        - "Dynamic response generation"
+      hints:
+        - level: 1
+          text: |
+            After parsing the request line, keep reading lines until you hit an
+            empty line. Each non-empty line is a header in `Name: Value` format.
+        - level: 2
+          text: |
+            Split each header line on the first `:` to separate the name and
+            value. Store headers in a dictionary. Then check the path to decide
+            what response to send.
+        - level: 3
+          text: |
+            Python:
+              lines = data.split('\r\n')
+              request_line = lines[0]
+              method, path, version = request_line.split(' ')
+
+              headers = {}
+              for line in lines[1:]:
+                  if line == '':
+                      break
+                  key, value = line.split(': ', 1)
+                  headers[key.lower()] = value
+
+              if path.startswith('/echo/'):
+                  body = path[6:]  # Everything after /echo/
+                  response = (
+                      f"HTTP/1.1 200 OK\r\n"
+                      f"Content-Type: text/plain\r\n"
+                      f"Content-Length: {len(body)}\r\n"
+                      f"\r\n"
+                      f"{body}"
+                  )
+              elif path == '/user-agent':
+                  body = headers.get('user-agent', '')
+                  response = (
+                      f"HTTP/1.1 200 OK\r\n"
+                      f"Content-Type: text/plain\r\n"
+                      f"Content-Length: {len(body)}\r\n"
+                      f"\r\n"
+                      f"{body}"
+                  )
+              else:
+                  response = "HTTP/1.1 200 OK\r\n\r\n"
+      reference_material:
+        title: "HTTP Headers Deep Dive"
+        body: |
+          **Header format**: `Name: Value\r\n`
+
+          Headers are terminated by a blank line (`\r\n\r\n`). This is how you
+          know where headers end and the body begins.
+
+          **Important request headers**:
+          | Header | Purpose |
+          |--------|---------|
+          | Host | Target hostname (required in HTTP/1.1) |
+          | Content-Length | Size of request body in bytes |
+          | Content-Type | MIME type of the body |
+          | Accept | What response types the client prefers |
+          | User-Agent | Client software identification |
+          | Connection | close or keep-alive |
+          | Accept-Encoding | Compression algorithms client supports |
+
+          **Important response headers**:
+          | Header | Purpose |
+          |--------|---------|
+          | Content-Length | Size of response body |
+          | Content-Type | MIME type of the body |
+          | Transfer-Encoding | How the body is encoded (e.g., chunked) |
+          | Connection | Whether to keep the connection open |
+          | Server | Server software identification |
+
+          **Case insensitivity**: Per RFC 7230, header field names are case-
+          insensitive. Store them in lowercase for easy lookup.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 4: Respond with 200 OK
+    # ──────────────────────────────────────────────
+    - id: "http-respond-200"
+      number: 4
+      title: "Respond with 200 OK"
+      narrative: |
+        You've been sending `200 OK` since stage 2, but now let's do it properly
+        with a complete response including headers and a body.
+
+        A well-formed HTTP response has:
+        1. **Status line**: `HTTP/1.1 200 OK\r\n`
+        2. **Headers**: At minimum, `Content-Type` and `Content-Length`
+        3. **Blank line**: `\r\n` separating headers from body
+        4. **Body**: The actual content
+
+        The `Content-Length` header is crucial — it tells the client exactly how
+        many bytes to read for the body. Without it, the client doesn't know when
+        the response ends (unless you use chunked transfer encoding or close the
+        connection, which we'll cover later).
+
+        Let's make your server respond to `GET /` with a proper HTML page.
+      task: |
+        When your server receives a `GET /` request, respond with a complete
+        HTTP response containing an HTML body:
+
+        ```
+        HTTP/1.1 200 OK\r\n
+        Content-Type: text/html\r\n
+        Content-Length: <length>\r\n
+        \r\n
+        <html><body><h1>Hello, World!</h1></body></html>
+        ```
+
+        The Content-Length must accurately reflect the byte length of the body.
+
+        Keep the `/echo/<string>` and `/user-agent` endpoints from the previous
+        stage working as well.
+
+        The test will verify the response status, headers, and body content.
+      concepts_taught:
+        - "Complete HTTP response structure"
+        - "Content-Length accuracy"
+        - "HTML content serving"
+      hints:
+        - level: 1
+          text: |
+            Build the response string with the status line, headers, blank line,
+            and body. Make sure Content-Length equals the byte length of the body.
+        - level: 2
+          text: |
+            Be careful with string encoding — Content-Length should be the number
+            of bytes, not the number of characters. For ASCII this is the same,
+            but for unicode it differs. Use `len(body.encode())` in Python.
+        - level: 3
+          text: |
+            Python:
+              body = "<html><body><h1>Hello, World!</h1></body></html>"
+              body_bytes = body.encode()
+              response = (
+                  f"HTTP/1.1 200 OK\r\n"
+                  f"Content-Type: text/html\r\n"
+                  f"Content-Length: {len(body_bytes)}\r\n"
+                  f"\r\n"
+              ).encode() + body_bytes
+              conn.sendall(response)
+      reference_material:
+        title: "Content-Length and Message Framing"
+        body: |
+          **Why Content-Length matters**: HTTP/1.1 allows multiple requests on one
+          TCP connection (keep-alive). The client needs to know where one response
+          ends and the next begins. Content-Length provides this boundary.
+
+          **Bytes vs characters**: Content-Length counts **bytes**, not characters.
+          For UTF-8 encoded text:
+          - ASCII characters: 1 byte each
+          - Most European accented characters: 2 bytes
+          - CJK characters: 3 bytes
+          - Emoji: 4 bytes
+
+          Always encode your body to bytes first, then measure:
+          ```python
+          body_bytes = body.encode('utf-8')
+          content_length = len(body_bytes)
+          ```
+
+          **What happens with wrong Content-Length**:
+          - Too short: Client cuts off the response early
+          - Too long: Client waits for more data (hangs)
+          - Missing: Client reads until connection close (unreliable with
+            keep-alive)
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 5: Serve Static Files
+    # ──────────────────────────────────────────────
+    - id: "http-static-files"
+      number: 5
+      title: "Serve Static Files"
+      narrative: |
+        The primary job of most HTTP servers is serving files — HTML pages, CSS
+        stylesheets, JavaScript files, images. When a client requests `/style.css`,
+        the server reads the corresponding file from disk and sends it back.
+
+        This requires mapping URL paths to filesystem paths. A common approach is
+        designating a **document root** directory. A request for `/images/logo.png`
+        maps to `<document_root>/images/logo.png`.
+
+        **Security warning**: You must be careful about **path traversal attacks**.
+        A malicious client might request `/../../../etc/passwd` to read files
+        outside the document root. Always resolve the full path and verify it stays
+        within the allowed directory.
+      task: |
+        Implement static file serving. Your server should accept a `--directory`
+        command-line argument specifying the document root:
+
+        ```
+        ./your_server --directory /tmp/www
+        ```
+
+        When a request comes in for `/files/<filename>`, serve the file from the
+        specified directory. For example, `/files/hello.txt` would serve
+        `<directory>/hello.txt`.
+
+        Requirements:
+        - Read the file contents and send them as the response body
+        - Set `Content-Type: application/octet-stream` (for now)
+        - Set `Content-Length` to the file size
+        - If the file doesn't exist, respond with 404 (we'll add this properly
+          in a later stage; for now, just send `HTTP/1.1 404 Not Found\r\n\r\n`)
+
+        The test will create a file in a temp directory, start your server with
+        `--directory` pointing to that directory, then request the file.
+      concepts_taught:
+        - "Static file serving"
+        - "Document root"
+        - "Path traversal prevention"
+        - "Command-line arguments"
+      hints:
+        - level: 1
+          text: |
+            Parse the `--directory` argument from sys.argv / process.argv. When
+            a request path starts with `/files/`, extract the filename and read
+            it from the directory.
+        - level: 2
+          text: |
+            Use `os.path.join(directory, filename)` to build the full path, then
+            read the file in binary mode. Check if the file exists before trying
+            to read it.
+        - level: 3
+          text: |
+            Python:
+              import sys, os
+
+              directory = '.'
+              if '--directory' in sys.argv:
+                  idx = sys.argv.index('--directory')
+                  directory = sys.argv[idx + 1]
+
+              if path.startswith('/files/'):
+                  filename = path[7:]
+                  filepath = os.path.join(directory, filename)
+                  # Security: ensure resolved path is within directory
+                  filepath = os.path.realpath(filepath)
+                  if not filepath.startswith(os.path.realpath(directory)):
+                      # Path traversal attempt
+                      response = "HTTP/1.1 403 Forbidden\r\n\r\n"
+                  elif os.path.isfile(filepath):
+                      with open(filepath, 'rb') as f:
+                          body = f.read()
+                      response = (
+                          f"HTTP/1.1 200 OK\r\n"
+                          f"Content-Type: application/octet-stream\r\n"
+                          f"Content-Length: {len(body)}\r\n"
+                          f"\r\n"
+                      ).encode() + body
+                  else:
+                      response = "HTTP/1.1 404 Not Found\r\n\r\n"
+      reference_material:
+        title: "Static File Serving and Security"
+        body: |
+          **Document root**: The base directory from which files are served. All
+          file paths are relative to this directory.
+
+          **Path traversal attacks**: A classic web vulnerability where the
+          attacker uses `../` sequences to escape the document root:
+          ```
+          GET /files/../../../etc/passwd HTTP/1.1
+          ```
+
+          **Prevention**:
+          1. Resolve the full path with `os.path.realpath()` or `path.resolve()`
+          2. Check that the resolved path starts with the document root
+          3. Reject requests that escape the root
+
+          **Reading files**:
+          - Always read in binary mode (`'rb'`) for file serving
+          - This correctly handles images, PDFs, and other binary files
+          - Text files are just a subset of binary data
+
+          **Large files**: For files larger than memory, you'd stream them in
+          chunks rather than reading the entire file. We'll keep it simple for
+          now with full reads.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 6: Content-Type Detection
+    # ──────────────────────────────────────────────
+    - id: "http-content-type"
+      number: 6
+      title: "Content-Type Detection"
+      narrative: |
+        Sending everything as `application/octet-stream` works, but browsers don't
+        know how to display the content properly. A `.html` file should be rendered
+        as a webpage. A `.png` file should be displayed as an image. A `.css` file
+        should be applied as a stylesheet.
+
+        The **Content-Type** header (also known as **MIME type**) tells the client
+        what kind of data it's receiving. MIME types follow the format
+        `type/subtype`:
+
+        - `text/html` — HTML documents
+        - `text/css` — CSS stylesheets
+        - `text/plain` — Plain text
+        - `application/json` — JSON data
+        - `image/png` — PNG images
+        - `image/jpeg` — JPEG images
+        - `application/javascript` — JavaScript files
+
+        The simplest way to detect the type is by file extension.
+      task: |
+        Extend your file serving to detect and set the correct Content-Type based
+        on the file extension.
+
+        Required mappings:
+        - `.html` → `text/html`
+        - `.css` → `text/css`
+        - `.js` → `application/javascript`
+        - `.json` → `application/json`
+        - `.txt` → `text/plain`
+        - `.png` → `image/png`
+        - `.jpg` / `.jpeg` → `image/jpeg`
+        - `.gif` → `image/gif`
+        - Everything else → `application/octet-stream`
+
+        The test will request files with various extensions and verify the
+        Content-Type header is set correctly.
+      concepts_taught:
+        - "MIME types"
+        - "Content-Type header"
+        - "File extension mapping"
+      hints:
+        - level: 1
+          text: |
+            Create a dictionary/map from file extensions to MIME types. Look up
+            the extension of the requested file and use the corresponding type.
+        - level: 2
+          text: |
+            In Python, you can use `os.path.splitext()` to get the extension, or
+            use the `mimetypes` module. In JavaScript, get the extension with
+            `path.extname()`.
+        - level: 3
+          text: |
+            Python:
+              MIME_TYPES = {
+                  '.html': 'text/html',
+                  '.css': 'text/css',
+                  '.js': 'application/javascript',
+                  '.json': 'application/json',
+                  '.txt': 'text/plain',
+                  '.png': 'image/png',
+                  '.jpg': 'image/jpeg',
+                  '.jpeg': 'image/jpeg',
+                  '.gif': 'image/gif',
+              }
+              ext = os.path.splitext(filepath)[1].lower()
+              content_type = MIME_TYPES.get(ext, 'application/octet-stream')
+      reference_material:
+        title: "MIME Types and Content Negotiation"
+        body: |
+          **MIME** (Multipurpose Internet Mail Extensions) types were originally
+          designed for email attachments but became the standard for identifying
+          content types on the web.
+
+          **Format**: `type/subtype[; parameter]`
+          Examples: `text/html; charset=utf-8`, `multipart/form-data; boundary=---`
+
+          **The seven top-level types**:
+          - `text` — Human-readable text
+          - `image` — Visual content
+          - `audio` — Sound content
+          - `video` — Moving images
+          - `application` — Binary data or structured formats
+          - `multipart` — Multiple parts (used in forms)
+          - `message` — Email messages
+
+          **Content negotiation**: The client's `Accept` header tells the server
+          what types it prefers. For example, a browser might send:
+          ```
+          Accept: text/html,application/xhtml+xml,*/*;q=0.8
+          ```
+          The server can use this to choose the best representation.
+
+          **charset**: For text types, specifying the character encoding is
+          important: `Content-Type: text/html; charset=utf-8`
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 7: Handle 404 Not Found
+    # ──────────────────────────────────────────────
+    - id: "http-404"
+      number: 7
+      title: "Handle 404 Not Found"
+      narrative: |
+        The 404 status code is probably the most famous HTTP status code — "Not
+        Found." When a client requests a resource that doesn't exist, the server
+        should respond with a 404 status and a helpful error page.
+
+        A proper 404 response isn't just a status code — it should include an HTML
+        body that helps the user. Have you ever seen a creative 404 page? Some
+        websites turn their error pages into art or humor. GitHub has an Octocat
+        in a space suit. Twitter (X) shows a cartoon robot.
+
+        But functionality comes first: the response must have the correct status
+        code so automated tools (search engines, scripts, monitoring) know the
+        resource wasn't found.
+      task: |
+        Implement proper 404 handling. When a request comes in for a path that
+        doesn't match any of your routes and the file doesn't exist, respond with:
+
+        ```
+        HTTP/1.1 404 Not Found\r\n
+        Content-Type: text/html\r\n
+        Content-Length: <length>\r\n
+        \r\n
+        <html><body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body></html>
+        ```
+
+        Requirements:
+        - Non-existent file paths under `/files/` return 404
+        - Unknown routes (paths not matching `/`, `/echo/...`, `/user-agent`,
+          or `/files/...`) return 404
+        - The response must include Content-Type and Content-Length headers
+        - The response body should be an HTML page
+
+        The test will request various non-existent paths and verify 404 responses.
+      concepts_taught:
+        - "HTTP error responses"
+        - "Status code semantics"
+        - "Error page design"
+      hints:
+        - level: 1
+          text: |
+            Add a default case to your path routing that returns a 404 response
+            for any unrecognized path.
+        - level: 2
+          text: |
+            Create a helper function that builds an HTTP response given a status
+            code, content type, and body. Reuse it for all response types.
+        - level: 3
+          text: |
+            Python:
+              def make_response(status_code, status_text, content_type, body):
+                  body_bytes = body.encode() if isinstance(body, str) else body
+                  return (
+                      f"HTTP/1.1 {status_code} {status_text}\r\n"
+                      f"Content-Type: {content_type}\r\n"
+                      f"Content-Length: {len(body_bytes)}\r\n"
+                      f"\r\n"
+                  ).encode() + body_bytes
+
+              # In your routing logic:
+              else:
+                  body = "<html><body><h1>404 Not Found</h1></body></html>"
+                  response = make_response(404, "Not Found", "text/html", body)
+      reference_material:
+        title: "HTTP Status Codes in Depth"
+        body: |
+          Status codes are grouped into five classes:
+
+          **1xx — Informational**: Request received, continuing process.
+          - 100 Continue, 101 Switching Protocols
+
+          **2xx — Success**: The request was successfully processed.
+          - 200 OK, 201 Created, 204 No Content
+
+          **3xx — Redirection**: Further action needed to complete the request.
+          - 301 Moved Permanently, 302 Found, 304 Not Modified
+
+          **4xx — Client Error**: The request has a problem on the client side.
+          - 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found,
+            405 Method Not Allowed, 429 Too Many Requests
+
+          **5xx — Server Error**: The server failed to fulfill a valid request.
+          - 500 Internal Server Error, 502 Bad Gateway, 503 Service Unavailable
+
+          **Error responses should always include a body** — even for APIs.
+          JSON APIs typically return structured errors:
+          ```json
+          {"error": {"code": 404, "message": "Resource not found"}}
+          ```
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 8: URL Routing
+    # ──────────────────────────────────────────────
+    - id: "http-routing"
+      number: 8
+      title: "URL Routing"
+      narrative: |
+        You've been handling paths with simple `if/elif` checks. As a server grows,
+        this becomes unwieldy. Real web frameworks use **routers** — structured
+        systems for matching URL patterns to handler functions.
+
+        A simple router maps path patterns to handler functions:
+        ```
+        /              → handle_index
+        /echo/<str>    → handle_echo
+        /files/<path>  → handle_files
+        /user-agent    → handle_user_agent
+        ```
+
+        The `<str>` and `<path>` parts are **path parameters** — parts of the URL
+        that are extracted as variables. When someone requests `/echo/hello`, the
+        router matches the pattern and passes `hello` as the parameter.
+
+        Building a simple router will clean up your code significantly and make it
+        easy to add new endpoints.
+      task: |
+        Refactor your path handling into a proper routing system. Implement a
+        router that supports:
+
+        - Exact path matching: `/` matches only `/`
+        - Prefix matching with parameters: `/echo/<str>` captures the rest as
+          a string parameter
+        - Prefix matching: `/files/<path>` captures a filename
+
+        Add a new route: `GET /health` that returns a 200 response with the body
+        `ok` and Content-Type `text/plain`.
+
+        The test will verify that all existing endpoints still work and that the
+        new `/health` endpoint responds correctly.
+      concepts_taught:
+        - "URL routing patterns"
+        - "Path parameters"
+        - "Handler functions"
+      hints:
+        - level: 1
+          text: |
+            Create a list of (pattern, handler_function) tuples. For each request,
+            iterate through the list and call the first handler whose pattern
+            matches.
+        - level: 2
+          text: |
+            You can use simple string matching for now. Check if the path starts
+            with a prefix and extract the remaining part as a parameter.
+        - level: 3
+          text: |
+            Python:
+              def route_echo(method, path, headers, body):
+                  text = path[6:]  # After /echo/
+                  return make_response(200, "OK", "text/plain", text)
+
+              def route_health(method, path, headers, body):
+                  return make_response(200, "OK", "text/plain", "ok")
+
+              routes = [
+                  ('GET', '/health', route_health),
+                  ('GET', '/echo/', route_echo),    # prefix match
+                  ('GET', '/files/', route_files),   # prefix match
+                  ('GET', '/user-agent', route_user_agent),
+                  ('GET', '/', route_index),
+              ]
+
+              for r_method, r_path, handler in routes:
+                  if method == r_method and path.startswith(r_path):
+                      response = handler(method, path, headers, body)
+                      break
+              else:
+                  response = make_response(404, "Not Found", "text/html", "...")
+      reference_material:
+        title: "URL Routing in Web Frameworks"
+        body: |
+          **Routing** is the process of matching an incoming request (method +
+          path) to the code that handles it.
+
+          **Common routing approaches**:
+          1. **Linear scan**: Check each route in order. Simple but O(n).
+          2. **Trie/prefix tree**: Build a tree from path segments. O(depth).
+          3. **Regex matching**: Use regular expressions. Flexible but slower.
+
+          **Path parameters**: Most frameworks support dynamic segments:
+          - Express.js: `/users/:id`
+          - Flask: `/users/<int:id>`
+          - Django: `/users/<int:pk>/`
+          - Go chi: `/users/{id}`
+
+          **Method matching**: Routes typically match on both the HTTP method
+          and the path. `GET /users` and `POST /users` are different routes.
+
+          **Middleware**: Production routers support middleware — functions that
+          run before/after the handler (logging, auth, CORS headers, etc.).
+
+          **Route priority**: When multiple patterns could match, the most
+          specific one should win. Exact matches before prefix matches, longer
+          prefixes before shorter ones.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 9: Parse Query Strings
+    # ──────────────────────────────────────────────
+    - id: "http-query-strings"
+      number: 9
+      title: "Parse Query Strings"
+      narrative: |
+        URLs can carry data in the **query string** — the part after the `?`:
+
+        ```
+        /search?q=hello&lang=en&page=2
+        ```
+
+        This is how search engines receive your search terms, how pagination works,
+        and how filters are applied. The query string is a series of key=value
+        pairs separated by `&`.
+
+        Special characters in query strings are **percent-encoded**: a space
+        becomes `%20` or `+`, an ampersand becomes `%26`, and so on. The encoding
+        follows RFC 3986.
+
+        Your server needs to:
+        1. Separate the path from the query string
+        2. Parse the key=value pairs
+        3. Decode percent-encoded characters
+      task: |
+        Extend your request parsing to handle query strings.
+
+        Implement a new endpoint `GET /search` that reads the `q` query parameter
+        and echoes it back. For example:
+        - `/search?q=hello` responds with body `Search query: hello`
+        - `/search?q=hello%20world` responds with body `Search query: hello world`
+        - `/search` (no query) responds with body `Search query: `
+
+        Requirements:
+        - Separate path from query string at the `?` character
+        - Parse multiple query parameters (`key1=val1&key2=val2`)
+        - Decode `%XX` percent-encoded characters
+        - Decode `+` as space (in query strings specifically)
+        - Route matching should use the path without the query string
+
+        The test will send requests with various query strings and verify the
+        response body.
+      concepts_taught:
+        - "Query strings"
+        - "URL encoding (percent-encoding)"
+        - "URL structure"
+      hints:
+        - level: 1
+          text: |
+            Split the request path on `?`. The part before is the path, the part
+            after is the query string. Then split the query string on `&` and
+            each pair on `=`.
+        - level: 2
+          text: |
+            For percent-decoding, replace `%XX` with the character whose ASCII
+            code is the hex value XX. Also replace `+` with space. Python has
+            `urllib.parse.unquote_plus()`.
+        - level: 3
+          text: |
+            Python:
+              from urllib.parse import urlparse, parse_qs, unquote_plus
+
+              # Split path and query
+              if '?' in path:
+                  path_part, query_string = path.split('?', 1)
+              else:
+                  path_part, query_string = path, ''
+
+              # Parse query parameters
+              params = {}
+              if query_string:
+                  for pair in query_string.split('&'):
+                      if '=' in pair:
+                          key, value = pair.split('=', 1)
+                          params[unquote_plus(key)] = unquote_plus(value)
+
+            JavaScript:
+              const url = new URL(path, 'http://localhost');
+              const q = url.searchParams.get('q') || '';
+      reference_material:
+        title: "URL Structure and Percent-Encoding"
+        body: |
+          **URL anatomy**:
+          ```
+          http://host:port/path?query=value#fragment
+          └─┬──┘ └──┬──┘ └┬┘ └──┬┘ └────┬────┘ └──┬───┘
+          scheme  host  port path  query      fragment
+          ```
+
+          The server sees: method, path (including query string), and version.
+          The fragment (#) is never sent to the server — it's client-side only.
+
+          **Percent-encoding** (RFC 3986):
+          - Characters outside the allowed set are encoded as `%HH`
+          - Space: `%20` (or `+` in query strings)
+          - `&`: `%26`
+          - `=`: `%3D`
+          - `/`: `%2F`
+
+          **Reserved characters** in query strings: `& = + # ; ? /`
+          These have special meaning and must be encoded when used as data.
+
+          **Query string vs request body**: For GET requests, data goes in the
+          query string. For POST/PUT, data typically goes in the request body.
+          Query strings are visible in URLs (browser history, logs, referrers),
+          so sensitive data should go in the body.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 10: Handle POST Body
+    # ──────────────────────────────────────────────
+    - id: "http-post-body"
+      number: 10
+      title: "Handle POST Request Body"
+      narrative: |
+        GET requests carry data in the URL. POST requests carry data in the
+        **request body** — the part after the blank line that separates headers
+        from content.
+
+        ```
+        POST /files/test.txt HTTP/1.1\r\n
+        Host: localhost:4221\r\n
+        Content-Type: application/octet-stream\r\n
+        Content-Length: 13\r\n
+        \r\n
+        Hello, World!
+        ```
+
+        The `Content-Length` header tells you exactly how many bytes to read from
+        the body. This is critical — without it, you don't know when the body ends
+        (since TCP is a stream with no inherent message boundaries).
+
+        Reading the body correctly is a common source of bugs. You must read
+        exactly `Content-Length` bytes — no more, no less. Reading too few means
+        you miss data. Reading too many means you'll block waiting for bytes that
+        never come.
+      task: |
+        Implement POST request handling. Add support for:
+
+        `POST /files/<filename>` — Save the request body to a file in the
+        document root directory. Respond with `201 Created`.
+
+        Requirements:
+        - Read the `Content-Length` header to determine body size
+        - Read exactly that many bytes from the connection
+        - Save the body to the specified file
+        - Respond with `HTTP/1.1 201 Created\r\n\r\n`
+        - If Content-Length is missing, respond with 400 Bad Request
+
+        The test will POST data to `/files/test.txt`, then GET `/files/test.txt`
+        to verify the file was saved correctly.
+      concepts_taught:
+        - "HTTP POST method"
+        - "Request body reading"
+        - "Content-Length handling"
+        - "201 Created status"
+      hints:
+        - level: 1
+          text: |
+            After parsing headers, if the method is POST and Content-Length is
+            present, read that many bytes from the socket for the body.
+        - level: 2
+          text: |
+            Be careful: the initial `recv()` that read the headers might have also
+            read some or all of the body. Check if you already have body bytes in
+            your buffer before reading more.
+        - level: 3
+          text: |
+            Python:
+              # After parsing headers from `data`:
+              header_end = data.index('\r\n\r\n') + 4
+              body_start = data[header_end:]  # Body bytes already read
+              content_length = int(headers.get('content-length', 0))
+
+              # Read remaining body bytes if needed
+              body = body_start.encode()
+              while len(body) < content_length:
+                  body += conn.recv(content_length - len(body))
+
+              if method == 'POST' and path.startswith('/files/'):
+                  filename = path[7:]
+                  filepath = os.path.join(directory, filename)
+                  with open(filepath, 'wb') as f:
+                      f.write(body)
+                  response = "HTTP/1.1 201 Created\r\n\r\n"
+      reference_material:
+        title: "HTTP Methods and Request Bodies"
+        body: |
+          **HTTP Methods and body conventions**:
+          | Method | Has Body? | Idempotent? | Purpose |
+          |--------|-----------|-------------|---------|
+          | GET | Usually no | Yes | Retrieve resource |
+          | POST | Yes | No | Create resource / submit data |
+          | PUT | Yes | Yes | Replace resource entirely |
+          | PATCH | Yes | No | Partially update resource |
+          | DELETE | Usually no | Yes | Remove resource |
+          | HEAD | No response body | Yes | Like GET but headers only |
+
+          **Idempotent**: Making the same request multiple times has the same
+          effect as making it once. GET, PUT, and DELETE are idempotent by
+          convention. POST is not.
+
+          **Reading the body reliably**:
+          1. Parse Content-Length from headers
+          2. Read exactly that many bytes (loop until complete)
+          3. The initial recv() may include some body bytes — account for this
+
+          **Common body formats**:
+          - `application/json` — JSON data
+          - `application/x-www-form-urlencoded` — Form data (like query strings)
+          - `multipart/form-data` — File uploads
+          - `application/octet-stream` — Raw binary data
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 11: Chunked Transfer Encoding
+    # ──────────────────────────────────────────────
+    - id: "http-chunked"
+      number: 11
+      title: "Chunked Transfer Encoding"
+      narrative: |
+        Sometimes the server doesn't know the total size of the response in
+        advance. Streaming data, dynamically generated content, or proxied
+        responses may not have a predetermined length.
+
+        **Chunked transfer encoding** solves this by sending the body in pieces
+        (chunks), each preceded by its size in hexadecimal:
+
+        ```
+        HTTP/1.1 200 OK\r\n
+        Transfer-Encoding: chunked\r\n
+        \r\n
+        7\r\n
+        Hello, \r\n
+        6\r\n
+        World!\r\n
+        0\r\n
+        \r\n
+        ```
+
+        Each chunk is: `<size-in-hex>\r\n<data>\r\n`. The final chunk has size `0`,
+        signaling the end of the response.
+
+        When using chunked encoding, you MUST NOT include a Content-Length header.
+        The two are mutually exclusive.
+      task: |
+        Implement chunked transfer encoding for the `/echo/<string>` endpoint.
+        When the request includes `Transfer-Encoding: chunked` in the `Accept-
+        Encoding` header (or when the response is large), send the response using
+        chunked encoding.
+
+        For simplicity: send the echo response as a single chunk followed by the
+        terminating zero-length chunk.
+
+        Also implement reading chunked request bodies. If a POST request has
+        `Transfer-Encoding: chunked` instead of Content-Length, read the body
+        by parsing chunks until you receive the zero-length terminator.
+
+        The test will verify both chunked responses and chunked request body
+        reading.
+      concepts_taught:
+        - "Transfer-Encoding: chunked"
+        - "Streaming responses"
+        - "HTTP message framing alternatives"
+      hints:
+        - level: 1
+          text: |
+            For chunked responses, set the `Transfer-Encoding: chunked` header
+            and format the body as size-in-hex + CRLF + data + CRLF, ending with
+            `0\r\n\r\n`.
+        - level: 2
+          text: |
+            For reading chunked requests, read a line to get the chunk size (hex),
+            then read that many bytes of data, then read the trailing CRLF. Repeat
+            until chunk size is 0.
+        - level: 3
+          text: |
+            Python — sending chunked response:
+              body = "Hello"
+              chunk = f"{len(body):x}\r\n{body}\r\n0\r\n\r\n"
+              response = (
+                  "HTTP/1.1 200 OK\r\n"
+                  "Content-Type: text/plain\r\n"
+                  "Transfer-Encoding: chunked\r\n"
+                  "\r\n"
+              ) + chunk
+
+            Reading chunked request body:
+              body_parts = []
+              while True:
+                  line = read_line(conn)  # Read until \r\n
+                  chunk_size = int(line.strip(), 16)
+                  if chunk_size == 0:
+                      break
+                  chunk_data = read_exact(conn, chunk_size)
+                  body_parts.append(chunk_data)
+                  read_exact(conn, 2)  # Consume trailing \r\n
+              body = b''.join(body_parts)
+      reference_material:
+        title: "Chunked Transfer Encoding (RFC 7230)"
+        body: |
+          **Chunked encoding format**:
+          ```
+          chunk     = chunk-size CRLF chunk-data CRLF
+          last-chunk = "0" CRLF CRLF
+          ```
+
+          **Example**:
+          ```
+          4\r\n        ← 4 bytes follow
+          Wiki\r\n     ← the data
+          6\r\n        ← 6 bytes follow
+          pedia \r\n   ← the data
+          0\r\n        ← end of chunks
+          \r\n         ← end of message
+          ```
+
+          **When to use chunked**:
+          - Server-Sent Events (streaming)
+          - Proxied responses where length is unknown
+          - Large dynamically generated content
+          - Any response where computing Content-Length upfront is expensive
+
+          **Chunked vs Content-Length**: You must use one or the other, never
+          both. If Content-Length is present, it takes precedence (and chunked
+          encoding is not used).
+
+          **Trailers**: The chunked encoding spec allows "trailer headers" after
+          the final chunk. This is rarely used in practice.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 12: Keep-Alive
+    # ──────────────────────────────────────────────
+    - id: "http-keep-alive"
+      number: 12
+      title: "Keep-Alive Connections"
+      narrative: |
+        In HTTP/1.0, each request required a new TCP connection. The three-way
+        handshake (SYN, SYN-ACK, ACK) added latency to every single request.
+        Loading a webpage with 20 resources meant 20 separate connections.
+
+        HTTP/1.1 changed this with **persistent connections** (keep-alive). By
+        default, the TCP connection stays open after a response, and the client
+        can send another request on the same connection.
+
+        The `Connection` header controls this:
+        - `Connection: keep-alive` — Keep the connection open (default in HTTP/1.1)
+        - `Connection: close` — Close after this response
+
+        This means your server needs to handle multiple requests on one connection.
+        After sending a response, don't close the socket — go back to reading
+        the next request.
+      task: |
+        Implement HTTP/1.1 persistent connections.
+
+        Requirements:
+        - After sending a response, keep the connection open and read the next
+          request (unless `Connection: close` is sent)
+        - If the request has `Connection: close`, close the connection after
+          responding
+        - Add a `Connection: keep-alive` header to responses when the connection
+          will stay open
+        - Add a `Connection: close` header when the connection will close
+        - Handle the case where the client disconnects unexpectedly
+
+        The test will send multiple requests on a single TCP connection and
+        verify all responses are received correctly.
+      concepts_taught:
+        - "HTTP persistent connections"
+        - "Connection header"
+        - "Request pipelining"
+      hints:
+        - level: 1
+          text: |
+            Wrap your request handling in a loop. After sending a response, read
+            the next request from the same connection. Check the Connection header
+            to know when to close.
+        - level: 2
+          text: |
+            After each response, check if `Connection: close` was requested. If
+            not, loop back to reading the next request. Handle the case where
+            recv() returns empty bytes (client disconnected).
+        - level: 3
+          text: |
+            Python:
+              conn, addr = server.accept()
+              while True:
+                  data = conn.recv(4096)
+                  if not data:
+                      break  # Client disconnected
+
+                  # Parse request...
+                  connection = headers.get('connection', 'keep-alive').lower()
+                  should_close = (connection == 'close')
+
+                  # Build response...
+                  if should_close:
+                      response_headers += "Connection: close\r\n"
+                  else:
+                      response_headers += "Connection: keep-alive\r\n"
+
+                  conn.sendall(response)
+
+                  if should_close:
+                      break
+              conn.close()
+      reference_material:
+        title: "HTTP/1.1 Persistent Connections"
+        body: |
+          **HTTP/1.0**: Each request = new TCP connection. Slow for pages with
+          many resources (images, CSS, JS).
+
+          **HTTP/1.1**: Connections are persistent by default. Multiple
+          request/response pairs can share one TCP connection.
+
+          **Benefits**:
+          - Eliminates TCP handshake overhead for subsequent requests
+          - Reduces server load (fewer socket resources)
+          - Enables TCP slow-start to reach full speed
+
+          **Pipelining**: HTTP/1.1 also allows sending multiple requests before
+          receiving responses. However, responses must come back in order.
+          In practice, pipelining has poor browser support and was largely
+          replaced by HTTP/2 multiplexing.
+
+          **Timeouts**: Servers should close idle keep-alive connections after
+          a timeout (typically 5-30 seconds) to reclaim resources.
+
+          **Head-of-line blocking**: A major limitation of HTTP/1.1 — if one
+          response is slow, all subsequent responses on that connection are
+          delayed. HTTP/2 solves this with multiplexing.
+      test_config:
+        timeout_seconds: 15
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 13: Gzip Compression
+    # ──────────────────────────────────────────────
+    - id: "http-gzip"
+      number: 13
+      title: "Gzip Compression"
+      narrative: |
+        Text-based content (HTML, CSS, JS, JSON) compresses remarkably well.
+        A typical HTML page might be 50KB uncompressed but only 10KB with gzip
+        compression. That's an 80% reduction in bandwidth.
+
+        HTTP supports compression through content negotiation:
+        1. The client sends `Accept-Encoding: gzip, deflate` to indicate which
+           compression algorithms it supports
+        2. The server compresses the response body with a supported algorithm
+        3. The server sets `Content-Encoding: gzip` to tell the client what it used
+        4. The `Content-Length` header reflects the compressed size
+
+        The most widely supported algorithm is **gzip** (RFC 1952), based on the
+        DEFLATE compression algorithm. Virtually every HTTP client supports it.
+      task: |
+        Implement gzip compression for responses.
+
+        Requirements:
+        - Check the `Accept-Encoding` request header for `gzip`
+        - If the client supports gzip, compress the response body using gzip
+        - Set `Content-Encoding: gzip` in the response
+        - Set `Content-Length` to the compressed body size
+        - If the client doesn't support gzip, send the body uncompressed
+        - Only compress text-based content types (text/*, application/json,
+          application/javascript)
+
+        The test will send requests with `Accept-Encoding: gzip` and verify
+        the response is correctly gzip-compressed.
+      concepts_taught:
+        - "Content negotiation"
+        - "Gzip compression"
+        - "Accept-Encoding / Content-Encoding headers"
+      hints:
+        - level: 1
+          text: |
+            Check if 'gzip' appears in the Accept-Encoding header. If so,
+            compress the body before sending and add the Content-Encoding header.
+        - level: 2
+          text: |
+            In Python, use the `gzip` module or `zlib` with wbits=31 for gzip
+            format. In JavaScript, use the built-in `zlib` module.
+        - level: 3
+          text: |
+            Python:
+              import gzip
+
+              accept_encoding = headers.get('accept-encoding', '')
+              should_gzip = 'gzip' in accept_encoding
+
+              if should_gzip and content_type.startswith(('text/', 'application/json', 'application/javascript')):
+                  body_bytes = gzip.compress(body_bytes)
+                  extra_headers = "Content-Encoding: gzip\r\n"
+              else:
+                  extra_headers = ""
+
+            JavaScript:
+              const zlib = require('zlib');
+              if (acceptEncoding.includes('gzip')) {
+                const compressed = zlib.gzipSync(bodyBuffer);
+                // Use compressed as body, add Content-Encoding: gzip
+              }
+      reference_material:
+        title: "HTTP Compression"
+        body: |
+          **Content negotiation flow**:
+          ```
+          Client → Server:
+            Accept-Encoding: gzip, deflate, br
+
+          Server → Client:
+            Content-Encoding: gzip
+            Content-Length: 1234  (compressed size)
+            [gzip-compressed body]
+          ```
+
+          **Common compression algorithms**:
+          | Algorithm | Header value | Compression | Speed |
+          |-----------|-------------|-------------|-------|
+          | gzip | gzip | Good | Fast |
+          | Brotli | br | Better | Slower |
+          | deflate | deflate | Good | Fast |
+          | zstd | zstd | Best | Fast |
+
+          **When NOT to compress**:
+          - Already compressed formats (JPEG, PNG, ZIP, MP4)
+          - Very small responses (compression overhead exceeds savings)
+          - CPU-constrained servers under heavy load
+
+          **Transfer-Encoding vs Content-Encoding**:
+          - Content-Encoding: The content itself is encoded (client decodes it)
+          - Transfer-Encoding: Only the transfer is encoded (intermediate proxies
+            may decode it)
+
+          In practice, Content-Encoding with gzip is what web servers use.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 14: Concurrent Connections
+    # ──────────────────────────────────────────────
+    - id: "http-concurrent"
+      number: 14
+      title: "Concurrent Connections"
+      narrative: |
+        Just like the echo server, a real HTTP server must handle many clients
+        simultaneously. A browser loading a single webpage might open 6-8
+        connections to the same server to download resources in parallel.
+
+        You've already solved this problem in the echo server project. The same
+        concurrency techniques apply here: threading, async I/O, or event-driven
+        architecture.
+
+        The key difference is that HTTP connections are heavier — they involve
+        parsing, routing, file I/O, and potentially compression. This makes
+        resource management even more important. Each connection handler should
+        clean up after itself: close file handles, free buffers, and handle errors
+        gracefully.
+
+        This is the final stage. After completing it, you'll have a functional
+        HTTP server capable of serving web pages to real browsers.
+      task: |
+        Make your HTTP server handle concurrent connections. Multiple clients
+        should be able to connect and receive responses simultaneously.
+
+        Requirements:
+        - Handle at least 10 concurrent connections
+        - Each connection should support keep-alive independently
+        - A slow client should not block other clients
+        - All features from previous stages must work correctly under concurrency
+
+        The test will make 10 concurrent requests (a mix of GET and POST, with
+        and without keep-alive) and verify all responses are correct and timely.
+      concepts_taught:
+        - "Concurrent HTTP serving"
+        - "Thread safety with shared state"
+        - "Resource management at scale"
+      hints:
+        - level: 1
+          text: |
+            Apply the same concurrency pattern you used in the echo server —
+            either threading or async I/O.
+        - level: 2
+          text: |
+            In Python, use `threading.Thread` for each accepted connection. In
+            JavaScript, the event loop handles this naturally. Make sure your
+            file serving code handles concurrent reads safely.
+        - level: 3
+          text: |
+            Python:
+              import threading
+
+              def handle_client(conn, addr, directory):
+                  try:
+                      while True:
+                          data = conn.recv(4096)
+                          if not data:
+                              break
+                          # Parse and handle request...
+                          conn.sendall(response)
+                          if should_close:
+                              break
+                  except Exception:
+                      pass
+                  finally:
+                      conn.close()
+
+              while True:
+                  conn, addr = server.accept()
+                  t = threading.Thread(target=handle_client, args=(conn, addr, directory))
+                  t.daemon = True
+                  t.start()
+
+            JavaScript — net.createServer callback naturally handles each
+            connection independently on the event loop.
+      reference_material:
+        title: "Production HTTP Server Architecture"
+        body: |
+          **Common architectures**:
+
+          1. **Thread-per-connection** (Apache prefork):
+             Simple, ~1000 concurrent connections max
+             ```
+             while True:
+                 conn = accept()
+                 Thread(target=handle, args=(conn,)).start()
+             ```
+
+          2. **Thread pool** (Tomcat, Apache worker):
+             Fixed threads, connections queued
+             ```
+             pool = ThreadPool(100)
+             while True:
+                 conn = accept()
+                 pool.submit(handle, conn)
+             ```
+
+          3. **Event-driven** (nginx, Node.js):
+             Single thread, non-blocking I/O, ~100K concurrent
+             ```
+             epoll = create_epoll()
+             while True:
+                 events = epoll.wait()
+                 for event in events:
+                     handle_event(event)
+             ```
+
+          4. **Hybrid** (Go, Rust tokio):
+             Lightweight green threads/tasks on a thread pool
+             ```
+             for each connection:
+                 spawn(async { handle(conn).await })
+             ```
+
+          **Thread safety**: If your handlers share state (e.g., a request
+          counter), you need synchronization (mutexes, locks, atomic operations)
+          to prevent data races.
+
+          **Congratulations!** You've built an HTTP server from scratch. You
+          understand what happens between typing a URL and seeing a webpage.
+      test_config:
+        timeout_seconds: 20
+        test_type: "integration"

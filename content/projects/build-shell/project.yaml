@@ -1,0 +1,1198 @@
+project:
+  id: "build-shell"
+  title: "Build Your Own Shell"
+  slug: "shell"
+  icon: "terminal"
+  difficulty: "beginner"
+  estimated_hours: 10
+  prerequisites: []
+  description: |
+    Build a Unix shell from scratch. A shell is the primary interface between a
+    human and the operating system — it reads commands, interprets them, and
+    orchestrates their execution. By building one yourself, you'll gain deep
+    understanding of processes, file descriptors, environment variables, and how
+    the programs on your computer actually get run.
+  concepts:
+    - "Process creation and management"
+    - "File descriptors and I/O"
+    - "Environment variables and PATH"
+    - "Signal handling"
+    - "Pipes and redirection"
+    - "Parsing and tokenization"
+  supported_languages:
+    - python
+    - javascript
+
+  stages:
+    # ──────────────────────────────────────────────
+    # Stage 1: Print a Prompt
+    # ──────────────────────────────────────────────
+    - id: "shell-print-prompt"
+      number: 1
+      title: "Print a Prompt"
+      narrative: |
+        Every shell session starts with a prompt — that familiar `$` or `>`
+        character that tells you the shell is ready for input. The prompt is the
+        shell's way of saying "I'm listening."
+
+        While production shells have elaborate prompts showing the username,
+        hostname, current directory, git branch, and more, we'll start simple.
+        Your shell needs to print a prompt and wait. That's it.
+
+        This stage is about setting up the REPL (Read-Eval-Print Loop) structure
+        that will be the backbone of your entire shell. A REPL:
+        1. **Prints** a prompt
+        2. **Reads** a line of input
+        3. **Evaluates** (executes) the command
+        4. **Loops** back to step 1
+
+        For now, we just need step 1 — and the loop.
+      task: |
+        Create a program that prints the prompt string `$ ` (dollar sign followed
+        by a space) to stdout, then waits for input. After receiving any input
+        (or EOF), it should print the prompt again. The program should keep
+        printing prompts until it receives EOF (end of file / Ctrl+D), at which
+        point it should exit with code 0.
+
+        Important: The prompt must be `$ ` (with a trailing space). Print it to
+        stdout, not stderr.
+      concepts_taught:
+        - "REPL pattern"
+        - "Standard I/O streams"
+        - "EOF detection"
+      hints:
+        - level: 1
+          text: |
+            Use a loop that prints the prompt, reads a line of input, and repeats.
+            Exit the loop when input returns EOF / null.
+        - level: 2
+          text: |
+            In Python, use `input()` which raises `EOFError` on EOF. In JavaScript,
+            use the `readline` module.
+        - level: 3
+          text: |
+            Python:
+              while True:
+                  try:
+                      print("$ ", end="", flush=True)
+                      input()
+                  except EOFError:
+                      break
+
+            JavaScript:
+              const readline = require('readline');
+              const rl = readline.createInterface({ input: process.stdin });
+              process.stdout.write('$ ');
+              rl.on('line', () => { process.stdout.write('$ '); });
+              rl.on('close', () => { process.exit(0); });
+      reference_material:
+        title: "The REPL Pattern and Standard Streams"
+        body: |
+          **REPL (Read-Eval-Print Loop)** is the fundamental pattern for
+          interactive programs. Shells, interpreters (Python, Node), and
+          debuggers all follow this structure.
+
+          **Standard streams**: Every Unix process has three standard streams:
+          - **stdin (fd 0)**: Input. Connected to the keyboard in a terminal.
+          - **stdout (fd 1)**: Normal output. Where your prompt and command
+            output go.
+          - **stderr (fd 2)**: Error output. Separate from stdout so errors
+            can be distinguished from normal output.
+
+          **EOF**: End of File. In a terminal, the user signals EOF with Ctrl+D.
+          When reading from a pipe or file, EOF occurs naturally at the end.
+          Your shell should exit cleanly on EOF — this is how scripts and pipes
+          know your shell is done.
+
+          **Flushing**: When stdout is connected to a pipe (not a terminal),
+          output is buffered. You must flush explicitly after printing the
+          prompt, or it won't appear until the buffer fills up.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 2: Read Input
+    # ──────────────────────────────────────────────
+    - id: "shell-read-input"
+      number: 2
+      title: "Read Input"
+      narrative: |
+        A prompt without input handling is just a blinking cursor. Now your shell
+        needs to actually read what the user types and demonstrate that it received
+        it.
+
+        For this stage, your shell doesn't need to execute anything — just echo
+        back what the user typed, prefixed with an indicator so we can tell the
+        shell received it. Think of this as the "R" in REPL — making sure your
+        reading mechanism works before we add evaluation.
+
+        Reading a line of input seems simple, but there are edge cases: What if
+        the line is empty? What about leading/trailing whitespace? What if the
+        user sends EOF mid-line? Handling these gracefully now will save you pain
+        later.
+      task: |
+        Extend your shell to read a line of input after displaying the prompt.
+        For any unrecognized input, print the message:
+        `<input>: command not found`
+
+        For example, if the user types `hello`, your shell should print:
+        `hello: command not found`
+
+        Then display the prompt again and wait for the next command.
+      concepts_taught:
+        - "Reading lines of input"
+        - "String handling"
+        - "Error messages for unknown commands"
+      hints:
+        - level: 1
+          text: |
+            Read a line of input after printing the prompt. Strip the newline
+            character, then print the "command not found" message.
+        - level: 2
+          text: |
+            In Python, `line = input()` already strips the trailing newline.
+            In JavaScript, the `'line'` event callback receives the line without
+            the trailing newline.
+        - level: 3
+          text: |
+            Python:
+              while True:
+                  try:
+                      print("$ ", end="", flush=True)
+                      line = input()
+                      print(f"{line}: command not found")
+                  except EOFError:
+                      break
+
+            JavaScript:
+              rl.on('line', (line) => {
+                process.stdout.write(`${line}: command not found\n`);
+                process.stdout.write('$ ');
+              });
+      reference_material:
+        title: "Line-Based Input and Command Recognition"
+        body: |
+          Shells read input one line at a time. When the user presses Enter, the
+          terminal sends the complete line (including the newline character) to
+          your program.
+
+          **Line buffering**: Terminals operate in "cooked" (canonical) mode by
+          default, where input is buffered line-by-line. The user can edit their
+          line (backspace, etc.) before pressing Enter. Your program receives the
+          final version.
+
+          **The "command not found" pattern**: Real shells check multiple sources
+          before giving up on a command:
+          1. Built-in commands (cd, exit, etc.)
+          2. Functions and aliases
+          3. Programs in PATH directories
+          4. If none match → "command not found"
+
+          We'll implement all of these in later stages. For now, everything is
+          "not found."
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 3: Parse Command and Arguments
+    # ──────────────────────────────────────────────
+    - id: "shell-parse-command"
+      number: 3
+      title: "Parse Command and Arguments"
+      narrative: |
+        When you type `ls -la /tmp` in a real shell, the shell splits that into
+        three parts: the command (`ls`) and its arguments (`-la`, `/tmp`). This
+        splitting process is called **tokenization** or **word splitting**.
+
+        The simplest approach is to split on whitespace. The first token is the
+        command name, and everything else is arguments. This is how the shell
+        knows what program to run and what parameters to pass to it.
+
+        Real shells have complex tokenization rules involving quotes, escapes,
+        variable expansion, and glob patterns. We'll add those later. For now,
+        simple whitespace splitting is sufficient.
+      task: |
+        Extend your shell to parse the input line into a command and its arguments.
+        For now, just demonstrate correct parsing by modifying the "not found"
+        message to only use the command name (first token), not the entire line.
+
+        For example, if the user types `foo bar baz`, your shell should print:
+        `foo: command not found`
+
+        Not `foo bar baz: command not found`.
+
+        Whitespace should be handled correctly: multiple spaces between arguments
+        should be treated the same as a single space. Leading and trailing
+        whitespace should be ignored.
+      concepts_taught:
+        - "Tokenization / word splitting"
+        - "Command vs. arguments distinction"
+        - "Whitespace handling"
+      hints:
+        - level: 1
+          text: |
+            Split the input line on whitespace. The first element is the command,
+            the rest are arguments.
+        - level: 2
+          text: |
+            In Python, `line.split()` splits on any whitespace and handles
+            multiple spaces. In JavaScript, `line.trim().split(/\s+/)` does the
+            same.
+        - level: 3
+          text: |
+            Python:
+              line = input()
+              parts = line.split()
+              if not parts:
+                  continue
+              command = parts[0]
+              args = parts[1:]
+              print(f"{command}: command not found")
+
+            JavaScript:
+              const parts = line.trim().split(/\s+/);
+              if (parts.length === 0 || parts[0] === '') continue;
+              const command = parts[0];
+              const args = parts.slice(1);
+              process.stdout.write(`${command}: command not found\n`);
+      reference_material:
+        title: "Shell Tokenization"
+        body: |
+          **Word splitting** is one of the shell's core responsibilities. The
+          POSIX standard defines specific rules, but the basic algorithm is:
+
+          1. Split the input into tokens using whitespace as delimiters
+          2. The first token is the command name
+          3. Remaining tokens are arguments passed to the command
+
+          **Special characters** that affect tokenization (we'll add these later):
+          - Quotes (`"` and `'`) prevent splitting within them
+          - Backslash (`\`) escapes the next character
+          - Pipes (`|`) and redirects (`>`, `<`) are operators, not arguments
+          - Semicolons (`;`) separate multiple commands
+          - Variables (`$VAR`) are expanded before splitting
+
+          **Empty input**: When the user just presses Enter, your shell should
+          simply print a new prompt without trying to execute anything. Always
+          handle the empty input case.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 4: Execute External Commands
+    # ──────────────────────────────────────────────
+    - id: "shell-execute-commands"
+      number: 4
+      title: "Execute External Commands"
+      narrative: |
+        This is where your shell becomes a real shell. Instead of just printing
+        "command not found," you're going to actually **run programs**.
+
+        On Unix, running a program involves two system calls:
+        1. **fork()** — Create a copy of the current process. The copy (child)
+           is nearly identical to the parent.
+        2. **exec()** — Replace the child's program with the new program. The
+           process ID stays the same, but the code being executed changes entirely.
+
+        The parent process (your shell) then calls **wait()** to pause until the
+        child process finishes. This fork-exec-wait cycle is how every command you
+        type in a shell gets executed.
+
+        For this stage, you'll execute commands by their full path (like
+        `/usr/bin/ls`). PATH resolution comes later.
+      task: |
+        Extend your shell to execute external commands. When the user types a
+        command that exists as an executable file (e.g., `/usr/bin/ls` or
+        `/bin/echo hello`), your shell should:
+
+        1. Fork a child process (or use your language's subprocess mechanism)
+        2. Execute the command with its arguments in the child
+        3. Wait for the command to finish
+        4. Print the next prompt
+
+        If the command is not found or not executable, continue to print
+        `<command>: command not found`.
+
+        The test will run commands like `/bin/echo hello` and verify the output
+        appears correctly.
+      concepts_taught:
+        - "fork() and exec() system calls"
+        - "Process creation"
+        - "Waiting for child processes"
+      hints:
+        - level: 1
+          text: |
+            You need to create a new process and run the command in it. In Python,
+            look at the `subprocess` module. In JavaScript, look at
+            `child_process`.
+        - level: 2
+          text: |
+            In Python, `subprocess.run([command] + args)` handles fork/exec/wait
+            for you. Check if the command exists first with `os.path.isfile()` and
+            `os.access()`. In JavaScript, use `child_process.spawnSync()`.
+        - level: 3
+          text: |
+            Python:
+              import subprocess, os
+              command = parts[0]
+              args = parts[1:]
+              if os.path.isfile(command) and os.access(command, os.X_OK):
+                  subprocess.run([command] + args)
+              else:
+                  print(f"{command}: command not found")
+
+            JavaScript:
+              const { spawnSync } = require('child_process');
+              const fs = require('fs');
+              if (fs.existsSync(command)) {
+                  spawnSync(command, args, { stdio: 'inherit' });
+              } else {
+                  process.stdout.write(`${command}: command not found\n`);
+              }
+      reference_material:
+        title: "Process Creation: fork() and exec()"
+        body: |
+          **fork()**: Creates a new process that is a copy of the calling process.
+          Returns twice: once in the parent (with the child's PID) and once in the
+          child (with 0). This is Unix's fundamental process creation mechanism.
+
+          **exec()** family: Replaces the current process's code with a new
+          program. The PID stays the same. Variants include:
+          - `execve()` — the base system call
+          - `execvp()` — searches PATH for the program
+          - `execlp()` — like execvp but with variadic arguments
+
+          **wait() / waitpid()**: The parent calls this to block until a child
+          exits. Returns the child's exit status. If you don't wait, child
+          processes become "zombies" (finished but still in the process table).
+
+          **Higher-level abstractions**:
+          - Python's `subprocess.run()` wraps fork/exec/wait
+          - JavaScript's `child_process.spawnSync()` does the same
+          - These are fine for building a shell — you don't need raw fork/exec
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 5: Handle cd
+    # ──────────────────────────────────────────────
+    - id: "shell-cd"
+      number: 5
+      title: "Handle the cd Built-in"
+      narrative: |
+        Here's a question that trips up many people: why can't `cd` be an external
+        program? Why must the shell handle it specially?
+
+        The answer lies in how processes work. When your shell runs an external
+        program with fork/exec, the command runs in a **child process**. The child
+        has its own working directory, independent of the parent. If `cd` were an
+        external program, it would change the child's directory, the child would
+        exit, and your shell's directory would be unchanged. Useless!
+
+        Commands that must modify the shell's own state are called **built-in
+        commands** (or shell builtins). `cd` is the classic example — it needs to
+        call `chdir()` in the shell process itself.
+      task: |
+        Implement the `cd` built-in command. Your shell should recognize `cd` as
+        a special command and handle it directly (not as an external program).
+
+        Requirements:
+        - `cd <path>` changes the current working directory to `<path>`
+        - `cd ~` or `cd` (no argument) changes to the HOME directory
+        - If the directory doesn't exist, print: `cd: <path>: No such file or directory`
+        - The working directory change must persist for subsequent commands
+
+        The test will use `cd` to change directories and then run `pwd` (or
+        `/bin/pwd`) to verify the directory actually changed.
+      concepts_taught:
+        - "Built-in commands vs external commands"
+        - "Working directory and chdir()"
+        - "HOME environment variable"
+      hints:
+        - level: 1
+          text: |
+            Before trying to execute a command externally, check if it's a built-in
+            like `cd`. If so, handle it within your shell process.
+        - level: 2
+          text: |
+            In Python, use `os.chdir(path)` to change the working directory.
+            Handle `~` by replacing it with `os.environ['HOME']`. Catch
+            `FileNotFoundError` for invalid paths.
+        - level: 3
+          text: |
+            Python:
+              if command == 'cd':
+                  path = args[0] if args else os.environ.get('HOME', '/')
+                  if path == '~':
+                      path = os.environ.get('HOME', '/')
+                  try:
+                      os.chdir(path)
+                  except FileNotFoundError:
+                      print(f"cd: {path}: No such file or directory")
+
+            JavaScript:
+              if (command === 'cd') {
+                const dir = args[0] || process.env.HOME || '/';
+                const path = dir === '~' ? (process.env.HOME || '/') : dir;
+                try { process.chdir(path); }
+                catch (e) { process.stdout.write(`cd: ${path}: No such file or directory\n`); }
+              }
+      reference_material:
+        title: "Built-in Commands and the Working Directory"
+        body: |
+          **Built-in commands** are commands the shell executes directly in its
+          own process, without forking. Common builtins include:
+          - `cd` — change directory
+          - `exit` — exit the shell
+          - `export` — set environment variables
+          - `alias` — create command aliases
+          - `history` — show command history
+
+          **chdir()**: The system call that changes a process's current working
+          directory. When you fork a child, it inherits the parent's working
+          directory. This is why commands like `ls` (without arguments) show
+          files in the shell's current directory.
+
+          **HOME**: The environment variable containing the user's home directory
+          path. `cd` with no arguments conventionally goes to HOME. The `~`
+          character is a shell expansion that resolves to HOME.
+
+          **Why this matters**: Understanding the distinction between builtins
+          and external commands is fundamental to understanding how shells work.
+          It also explains why `cd` is often implemented differently across
+          shells — it's not a separate program with a man page, it's part of
+          the shell itself.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 6: Handle exit
+    # ──────────────────────────────────────────────
+    - id: "shell-exit"
+      number: 6
+      title: "Handle the exit Built-in"
+      narrative: |
+        The `exit` command is another essential built-in. It tells the shell to
+        terminate, optionally with a specific exit code. Exit codes are how Unix
+        programs communicate success or failure to their caller.
+
+        By convention:
+        - **0** means success
+        - **1** means general error
+        - **2** means misuse of command
+        - **126** means command found but not executable
+        - **127** means command not found
+        - **128+N** means killed by signal N
+
+        When your shell exits, its exit code is passed to whatever started it —
+        another shell, a script, a terminal emulator. This is how shell scripts
+        can use `if` statements and conditional execution (`&&`, `||`) based on
+        whether commands succeed.
+      task: |
+        Implement the `exit` built-in command.
+
+        Requirements:
+        - `exit` (no arguments) exits the shell with code 0
+        - `exit <code>` exits the shell with the specified numeric exit code
+        - `exit` should be recognized before any PATH lookup
+
+        The test will send `exit 42` and verify your shell exits with code 42.
+      concepts_taught:
+        - "Exit codes"
+        - "Process termination"
+        - "Shell built-in priority"
+      hints:
+        - level: 1
+          text: |
+            When the parsed command is "exit", terminate the shell process with
+            the appropriate exit code instead of trying to run it externally.
+        - level: 2
+          text: |
+            In Python, use `sys.exit(code)`. In JavaScript, use
+            `process.exit(code)`. Parse the exit code from the first argument,
+            defaulting to 0.
+        - level: 3
+          text: |
+            Python:
+              import sys
+              if command == 'exit':
+                  code = int(args[0]) if args else 0
+                  sys.exit(code)
+
+            JavaScript:
+              if (command === 'exit') {
+                const code = args[0] ? parseInt(args[0], 10) : 0;
+                process.exit(code);
+              }
+      reference_material:
+        title: "Exit Codes and Process Termination"
+        body: |
+          **Exit codes** (also called return codes or exit status) are a single
+          byte (0-255) that a process returns when it terminates.
+
+          **Convention**:
+          | Code | Meaning |
+          |------|---------|
+          | 0 | Success |
+          | 1 | General error |
+          | 2 | Misuse of command |
+          | 126 | Not executable |
+          | 127 | Command not found |
+          | 128+N | Killed by signal N |
+
+          **In shell scripts**, exit codes power control flow:
+          ```sh
+          if command; then
+              echo "success"
+          fi
+          command1 && command2  # command2 runs only if command1 succeeds
+          command1 || command2  # command2 runs only if command1 fails
+          ```
+
+          **$?**: In most shells, `$?` holds the exit code of the last command.
+          Your shell could implement this later as a special variable.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 7: PATH Resolution
+    # ──────────────────────────────────────────────
+    - id: "shell-path-resolution"
+      number: 7
+      title: "PATH Resolution"
+      narrative: |
+        Right now, your shell requires full paths to run commands (`/bin/ls`
+        instead of just `ls`). That's tedious. Real shells search for programs
+        in a set of directories defined by the **PATH** environment variable.
+
+        PATH is a colon-separated list of directories like:
+        `/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`
+
+        When you type `ls`, the shell checks each directory in order:
+        1. Does `/usr/local/bin/ls` exist and is it executable? No → next.
+        2. Does `/usr/bin/ls` exist and is it executable? Yes → run it!
+
+        The first match wins. This is why the order of directories in PATH matters,
+        and why prepending a directory to PATH lets you override system commands.
+
+        Built-in commands should still take priority over PATH-resolved commands.
+        If you name a file `cd` and put it in your PATH, the built-in should win.
+      task: |
+        Implement PATH resolution. When the user types a command name (without
+        a `/`), your shell should search the directories in the PATH environment
+        variable for an executable file with that name.
+
+        Requirements:
+        - Search PATH directories in order; use the first match
+        - If the command contains a `/`, treat it as a direct path (no PATH search)
+        - Built-in commands take priority over external commands
+        - If no match is found in PATH, print: `<command>: command not found`
+
+        The test will run commands like `echo`, `ls`, and `cat` (without full
+        paths) and verify they execute correctly.
+      concepts_taught:
+        - "PATH environment variable"
+        - "Executable lookup algorithm"
+        - "Command resolution order"
+      hints:
+        - level: 1
+          text: |
+            Read the PATH environment variable, split it on `:`, then for each
+            directory check if the command exists there as an executable file.
+        - level: 2
+          text: |
+            In Python: `os.environ.get('PATH', '').split(':')` gives you the
+            directories. For each, join with the command name and check
+            `os.path.isfile()` and `os.access(path, os.X_OK)`.
+        - level: 3
+          text: |
+            Python:
+              def find_in_path(cmd):
+                  if '/' in cmd:
+                      return cmd if os.path.isfile(cmd) and os.access(cmd, os.X_OK) else None
+                  for directory in os.environ.get('PATH', '').split(':'):
+                      full = os.path.join(directory, cmd)
+                      if os.path.isfile(full) and os.access(full, os.X_OK):
+                          return full
+                  return None
+
+            JavaScript:
+              function findInPath(cmd) {
+                if (cmd.includes('/')) return fs.existsSync(cmd) ? cmd : null;
+                const dirs = (process.env.PATH || '').split(':');
+                for (const dir of dirs) {
+                  const full = path.join(dir, cmd);
+                  try { fs.accessSync(full, fs.constants.X_OK); return full; }
+                  catch { continue; }
+                }
+                return null;
+              }
+      reference_material:
+        title: "PATH and Command Resolution"
+        body: |
+          **PATH** is an environment variable containing a colon-delimited list
+          of directories the shell searches for executable programs.
+
+          **Resolution order** (for a typical POSIX shell):
+          1. Built-in commands (cd, exit, export, etc.)
+          2. Shell functions
+          3. PATH search (first match wins)
+
+          **Security implications**: If `.` (current directory) is in PATH
+          (especially at the beginning), an attacker could place a malicious `ls`
+          in a directory you visit. This is why modern systems don't include `.`
+          in PATH by default.
+
+          **Modifying PATH**:
+          ```sh
+          export PATH="/my/custom/bin:$PATH"  # Prepend (highest priority)
+          export PATH="$PATH:/my/custom/bin"  # Append (lowest priority)
+          ```
+
+          **which and type**: The `which` command shows which executable a command
+          name resolves to. The `type` builtin also shows builtins and functions.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 8: Quoting and Escaping
+    # ──────────────────────────────────────────────
+    - id: "shell-quoting"
+      number: 8
+      title: "Quoting and Escaping"
+      narrative: |
+        So far, your shell splits input on whitespace. But what if an argument
+        contains spaces? For example:
+
+        ```
+        echo "hello world"    → should print: hello world
+        echo hello\ world     → should print: hello world
+        echo 'it'\''s fine'   → should print: it's fine
+        ```
+
+        Shells support three quoting mechanisms:
+        - **Double quotes** (`"..."`) — Group words into one argument. Most special
+          characters lose their meaning, but `$`, `` ` ``, and `\` are still
+          processed.
+        - **Single quotes** (`'...'`) — Everything is literal. No character has
+          special meaning inside single quotes (not even backslash).
+        - **Backslash** (`\`) — Escapes the next character, making it literal.
+
+        For this stage, we'll implement basic quoting: double quotes group words
+        into single arguments, single quotes preserve everything literally, and
+        backslash escapes the next character.
+      task: |
+        Extend your tokenizer to handle quoting and escaping:
+
+        - **Single quotes**: Everything between `'` and `'` is a single token,
+          including spaces. No escape sequences are recognized.
+        - **Double quotes**: Everything between `"` and `"` is a single token,
+          including spaces. Backslash escapes `"` and `\` within double quotes.
+        - **Backslash**: Outside of quotes, `\` makes the next character literal.
+        - Adjacent quoted and unquoted strings are concatenated:
+          `"hello "world` → `hello world`
+
+        The test will run commands like:
+          echo "hello   world"
+          echo 'single quoted'
+          echo hello\ world
+        and verify the arguments are parsed correctly.
+      concepts_taught:
+        - "Shell quoting rules"
+        - "Escape sequences"
+        - "Tokenizer state machines"
+      hints:
+        - level: 1
+          text: |
+            You can't just split on whitespace anymore. You need a character-by-
+            character tokenizer that tracks whether you're inside quotes.
+        - level: 2
+          text: |
+            Build a state machine with states: NORMAL, IN_SINGLE_QUOTE,
+            IN_DOUBLE_QUOTE. In NORMAL state, spaces delimit tokens and quotes
+            change state. In quote states, the matching quote ends the state.
+        - level: 3
+          text: |
+            Python skeleton:
+              def tokenize(line):
+                  tokens, current, state = [], [], 'NORMAL'
+                  i = 0
+                  while i < len(line):
+                      c = line[i]
+                      if state == 'NORMAL':
+                          if c == "'": state = 'SINGLE'
+                          elif c == '"': state = 'DOUBLE'
+                          elif c == '\\' and i+1 < len(line):
+                              current.append(line[i+1]); i += 1
+                          elif c.isspace():
+                              if current: tokens.append(''.join(current)); current = []
+                          else: current.append(c)
+                      elif state == 'SINGLE':
+                          if c == "'": state = 'NORMAL'
+                          else: current.append(c)
+                      elif state == 'DOUBLE':
+                          if c == '"': state = 'NORMAL'
+                          elif c == '\\' and i+1 < len(line) and line[i+1] in ('"', '\\'):
+                              current.append(line[i+1]); i += 1
+                          else: current.append(c)
+                      i += 1
+                  if current: tokens.append(''.join(current))
+                  return tokens
+      reference_material:
+        title: "Shell Quoting Rules (POSIX)"
+        body: |
+          **Single quotes** preserve every character literally:
+          ```
+          echo 'hello $USER \n'  → hello $USER \n
+          ```
+          The only character you can't include is a single quote itself.
+
+          **Double quotes** preserve most characters, but some remain special:
+          - `$` — variable/command substitution (not implemented yet)
+          - `` ` `` — command substitution (legacy syntax)
+          - `\` — escapes `$`, `` ` ``, `"`, `\`, and newline
+          - `"` — ends the double-quoted string
+
+          **Backslash** outside quotes makes the next character literal:
+          ```
+          echo hello\ world  → hello world (one argument, not two)
+          echo \$HOME        → $HOME (literal, not expanded)
+          ```
+
+          **Concatenation**: Adjacent tokens without whitespace merge:
+          ```
+          echo "hello "'world'  → hello world (one argument)
+          ```
+
+          Implementing a proper tokenizer is a significant step up from simple
+          whitespace splitting. It's essentially a small lexer/parser.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 9: Pipes
+    # ──────────────────────────────────────────────
+    - id: "shell-pipes"
+      number: 9
+      title: "Pipes"
+      narrative: |
+        Pipes are one of Unix's most brilliant inventions. The `|` operator
+        connects the stdout of one command to the stdin of the next, allowing you
+        to compose simple programs into powerful pipelines:
+
+        ```
+        cat file.txt | grep "error" | sort | uniq -c | sort -rn
+        ```
+
+        Under the hood, the shell:
+        1. Creates a pipe (a pair of file descriptors — one for reading, one for
+           writing)
+        2. Forks the left command, redirecting its stdout to the pipe's write end
+        3. Forks the right command, redirecting its stdin to the pipe's read end
+        4. Closes the pipe ends it no longer needs
+        5. Waits for both commands to finish
+
+        This is the Unix philosophy in action: small, focused programs that
+        communicate through text streams.
+      task: |
+        Implement the pipe operator (`|`). Your shell should be able to pipe the
+        stdout of one command into the stdin of the next.
+
+        Requirements:
+        - Support at least two commands connected by `|`
+        - Support chaining 3 or more commands: `cmd1 | cmd2 | cmd3`
+        - Both commands in a pipeline should run concurrently
+        - The shell should wait for all commands in the pipeline to finish
+
+        The test will run commands like:
+          echo "hello world" | cat
+          echo "hello\nworld" | sort
+          cat /etc/passwd | head -5 | wc -l
+        and verify the output.
+      concepts_taught:
+        - "Unix pipes"
+        - "File descriptor redirection"
+        - "The pipe() system call"
+        - "Unix philosophy"
+      hints:
+        - level: 1
+          text: |
+            First, split the input on `|` characters (being careful about quoted
+            strings). Then create a pipe between each pair of commands and connect
+            stdout/stdin appropriately.
+        - level: 2
+          text: |
+            In Python, you can use `subprocess.Popen` with `stdin=PIPE` and
+            `stdout=PIPE` parameters to chain commands. Alternatively, use
+            `os.pipe()` for lower-level control.
+        - level: 3
+          text: |
+            Python using subprocess:
+              from subprocess import Popen, PIPE
+              commands = line.split('|')  # Simplified; respect quotes
+              procs = []
+              prev_stdout = None
+              for i, cmd_str in enumerate(commands):
+                  parts = cmd_str.strip().split()
+                  stdin = prev_stdout
+                  stdout = PIPE if i < len(commands) - 1 else None
+                  p = Popen(parts, stdin=stdin, stdout=stdout)
+                  if prev_stdout:
+                      prev_stdout.close()
+                  prev_stdout = p.stdout
+                  procs.append(p)
+              for p in procs:
+                  p.wait()
+
+            JavaScript:
+              Use child_process.spawn() with { stdio: ['pipe', 'pipe', 'inherit'] }
+              and pipe stdout of one to stdin of the next.
+      reference_material:
+        title: "Pipes and the pipe() System Call"
+        body: |
+          **pipe()** creates a unidirectional communication channel:
+          ```c
+          int fds[2];
+          pipe(fds);
+          // fds[0] is the read end
+          // fds[1] is the write end
+          ```
+
+          **Setting up a pipeline** (`cmd1 | cmd2`):
+          1. Call `pipe()` to create a pipe
+          2. Fork for cmd1: redirect stdout (fd 1) to pipe's write end
+          3. Fork for cmd2: redirect stdin (fd 0) to pipe's read end
+          4. Close unused pipe ends in each process
+          5. Wait for both children
+
+          **Critical**: You must close the write end of the pipe when done, or
+          the reader will hang forever waiting for EOF.
+
+          **Pipelines and exit codes**: In most shells, `$?` gives the exit code
+          of the last command in the pipeline. Bash has `$PIPESTATUS` for all.
+
+          **Buffering**: stdio buffers output differently when connected to a pipe
+          vs. a terminal. Programs may not flush output promptly, which can make
+          pipelines seem to "hang."
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 10: I/O Redirection
+    # ──────────────────────────────────────────────
+    - id: "shell-io-redirection"
+      number: 10
+      title: "I/O Redirection"
+      narrative: |
+        Pipes connect programs to each other. Redirection connects programs to
+        files. The `>` operator sends stdout to a file, `<` reads stdin from a
+        file, and `>>` appends to a file.
+
+        ```
+        echo "hello" > output.txt     # Write stdout to file
+        cat < input.txt               # Read stdin from file
+        echo "more" >> output.txt     # Append stdout to file
+        command 2> errors.txt         # Redirect stderr to file
+        ```
+
+        Under the hood, redirection works by manipulating file descriptors before
+        executing the command. The shell opens the target file and uses `dup2()` to
+        replace stdin (fd 0) or stdout (fd 1) with the file's descriptor. The
+        command never knows the difference — it just reads from stdin or writes to
+        stdout as usual.
+      task: |
+        Implement I/O redirection operators:
+
+        - `command > file` — Redirect stdout to file (create/truncate)
+        - `command >> file` — Redirect stdout to file (create/append)
+        - `command < file` — Redirect stdin from file
+        - These should work in combination: `command < in.txt > out.txt`
+        - Redirection operators should be stripped from the argument list before
+          executing the command
+
+        The test will run commands with various redirections and verify file
+        contents and command output.
+      concepts_taught:
+        - "File descriptors"
+        - "dup2() system call"
+        - "File creation modes (truncate vs append)"
+      hints:
+        - level: 1
+          text: |
+            Before executing a command, scan its tokens for `>`, `>>`, and `<`.
+            Remove those tokens and the filename that follows them, and set up
+            the appropriate file redirections.
+        - level: 2
+          text: |
+            In Python with subprocess, use the `stdin`, `stdout` parameters with
+            open file objects. Use `open(file, 'w')` for `>` and
+            `open(file, 'a')` for `>>`.
+        - level: 3
+          text: |
+            Python:
+              def parse_redirections(tokens):
+                  cmd_tokens, stdin_file, stdout_file, append = [], None, None, False
+                  i = 0
+                  while i < len(tokens):
+                      if tokens[i] == '>' and i+1 < len(tokens):
+                          stdout_file = tokens[i+1]; append = False; i += 2
+                      elif tokens[i] == '>>' and i+1 < len(tokens):
+                          stdout_file = tokens[i+1]; append = True; i += 2
+                      elif tokens[i] == '<' and i+1 < len(tokens):
+                          stdin_file = tokens[i+1]; i += 2
+                      else:
+                          cmd_tokens.append(tokens[i]); i += 1
+                  return cmd_tokens, stdin_file, stdout_file, append
+
+              # Then pass open files to subprocess.run():
+              stdin_f = open(stdin_file) if stdin_file else None
+              mode = 'a' if append else 'w'
+              stdout_f = open(stdout_file, mode) if stdout_file else None
+              subprocess.run(cmd_tokens, stdin=stdin_f, stdout=stdout_f)
+      reference_material:
+        title: "I/O Redirection and File Descriptors"
+        body: |
+          **File descriptors** are small integers that represent open files/streams:
+          | FD | Name | Default |
+          |----|------|---------|
+          | 0 | stdin | keyboard |
+          | 1 | stdout | terminal |
+          | 2 | stderr | terminal |
+
+          **dup2(oldfd, newfd)**: Replaces newfd with a copy of oldfd. This is
+          how redirection works at the system call level:
+          ```c
+          int fd = open("output.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          dup2(fd, STDOUT_FILENO);  // stdout now points to the file
+          close(fd);  // clean up the extra descriptor
+          exec("command", ...);  // command writes to file, thinking it's stdout
+          ```
+
+          **Truncate vs Append**:
+          - `>` opens with O_TRUNC — file is emptied before writing
+          - `>>` opens with O_APPEND — data is added to the end
+
+          **Combining redirections**: You can redirect both stdin and stdout:
+          ```sh
+          sort < unsorted.txt > sorted.txt
+          ```
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 11: Background Processes
+    # ──────────────────────────────────────────────
+    - id: "shell-background"
+      number: 11
+      title: "Background Processes"
+      narrative: |
+        When you type `sleep 10 &`, the shell starts the command but immediately
+        gives you a new prompt instead of waiting. The command runs in the
+        **background**. This is fundamental to multitasking in a shell.
+
+        The `&` operator at the end of a command tells the shell: "Fork this
+        command but don't call wait() yet. Let me keep working." The shell
+        typically prints the background job's PID so the user can reference it
+        later.
+
+        There's a catch: when a background process finishes, it becomes a zombie
+        until the parent (your shell) calls wait(). Your shell should periodically
+        reap finished background processes to prevent zombie accumulation. A
+        common approach is to check for finished children (with WNOHANG) each time
+        the prompt is shown.
+      task: |
+        Implement the background execution operator (`&`).
+
+        Requirements:
+        - `command &` runs the command in the background
+        - The shell immediately prints `[<job_num>] <pid>` and shows a new prompt
+        - When a background job finishes, the next time a prompt is shown, print:
+          `[<job_num>] Done    <command>`
+        - The shell should not hang waiting for background processes
+
+        The test will start a background process (`sleep 1 &`), verify the prompt
+        returns immediately, and check that the completion message appears.
+      concepts_taught:
+        - "Background processes"
+        - "Job control basics"
+        - "Zombie processes and reaping"
+      hints:
+        - level: 1
+          text: |
+            Check if the last token is `&`. If so, remove it and fork the command
+            without waiting for it. Store the child PID for tracking.
+        - level: 2
+          text: |
+            In Python, use `subprocess.Popen` without calling `.wait()`. Store
+            the Popen object and check `.poll()` before each prompt.
+            In JavaScript, use `child_process.spawn` with `{ detached: false }`.
+        - level: 3
+          text: |
+            Python:
+              bg_jobs = []  # List of (job_num, pid, command, Popen)
+              job_counter = 0
+
+              if tokens[-1] == '&':
+                  tokens = tokens[:-1]
+                  job_counter += 1
+                  p = subprocess.Popen(tokens)
+                  bg_jobs.append((job_counter, p.pid, ' '.join(tokens), p))
+                  print(f"[{job_counter}] {p.pid}")
+              else:
+                  subprocess.run(tokens)
+
+              # Before each prompt, reap finished jobs:
+              for job in bg_jobs[:]:
+                  if job[3].poll() is not None:
+                      print(f"[{job[0]}] Done    {job[2]}")
+                      bg_jobs.remove(job)
+      reference_material:
+        title: "Background Processes and Job Control"
+        body: |
+          **Background execution**: The `&` operator tells the shell to start a
+          process without waiting for it to complete.
+
+          **Job tracking**: Shells maintain a job table mapping job numbers to
+          process groups. Common job control commands:
+          - `jobs` — list background jobs
+          - `fg %N` — bring job N to the foreground
+          - `bg %N` — continue stopped job N in the background
+          - `kill %N` — send a signal to job N
+
+          **Zombie processes**: When a process exits, it stays in the process
+          table as a zombie until its parent calls `wait()`. If your shell never
+          reaps background children, zombies accumulate:
+          ```
+          $ ps aux | grep Z   # Show zombie processes
+          ```
+
+          **WNOHANG**: The `waitpid(-1, &status, WNOHANG)` call checks for
+          finished children without blocking. Returns 0 if no children have
+          exited, or the PID of a finished child.
+
+          **Process groups**: In production shells, each pipeline runs in its own
+          process group, enabling signals to be sent to all processes in a
+          pipeline at once.
+      test_config:
+        timeout_seconds: 15
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 12: Signal Handling
+    # ──────────────────────────────────────────────
+    - id: "shell-signals"
+      number: 12
+      title: "Signal Handling"
+      narrative: |
+        Press Ctrl+C in a shell and the running foreground command dies, but the
+        shell itself survives. How? Signals.
+
+        When you press Ctrl+C, the terminal sends **SIGINT** to the entire
+        foreground process group. If your shell is in the same group as the
+        child, both receive SIGINT. To prevent this, production shells put each
+        command in its own process group and handle SIGINT in the shell process
+        specially.
+
+        Similarly, Ctrl+Z sends **SIGTSTP** to suspend the foreground process.
+        The shell then says `[1]+ Stopped  command` and gives you a new prompt.
+
+        For this final stage, your shell needs to handle Ctrl+C gracefully:
+        interrupt the foreground command without killing the shell.
+      task: |
+        Implement signal handling for your shell:
+
+        Requirements:
+        - **Ctrl+C (SIGINT)**: If a foreground command is running, it should be
+          interrupted (the command dies, not the shell). If no command is running
+          (user is at the prompt), print a new blank line and show a fresh prompt.
+        - **Ctrl+\ (SIGQUIT)**: Should be ignored by the shell but delivered to
+          foreground commands.
+        - The shell itself should never be killed by SIGINT or SIGQUIT.
+
+        The test will start a long-running foreground command (`sleep 30`),
+        send SIGINT, verify the command is killed, and check that the shell
+        presents a new prompt.
+      concepts_taught:
+        - "Signal handling in shells"
+        - "Process groups"
+        - "Signal masking"
+      hints:
+        - level: 1
+          text: |
+            You need to catch SIGINT in your shell and decide what to do based on
+            whether a foreground command is running.
+        - level: 2
+          text: |
+            In Python, use `signal.signal(signal.SIGINT, handler)` or set SIGINT
+            to SIG_IGN during command execution and rely on the child's default
+            handling. In JavaScript, handle `process.on('SIGINT', ...)`.
+        - level: 3
+          text: |
+            Python approach — ignore SIGINT in the shell, let the child handle it:
+              import signal, subprocess, os
+
+              signal.signal(signal.SIGINT, signal.SIG_IGN)
+              signal.signal(signal.SIGQUIT, signal.SIG_IGN)
+
+              # When running a foreground command, create a new process group:
+              p = subprocess.Popen(tokens, preexec_fn=os.setpgrp)
+              try:
+                  p.wait()
+              except:
+                  pass
+              # The child gets SIGINT via its process group; the shell doesn't.
+
+            JavaScript:
+              process.on('SIGINT', () => {
+                if (!currentChild) {
+                  process.stdout.write('\n$ ');
+                }
+                // If a child is running, the OS delivers SIGINT to it
+              });
+      reference_material:
+        title: "Signals, Process Groups, and Terminal Control"
+        body: |
+          **Process groups**: Every process belongs to a process group. The
+          terminal sends signals to the **foreground process group**. Shells
+          create a new process group for each command/pipeline so signals go
+          to the right place.
+
+          **Key signals for shells**:
+          | Signal | Trigger | Default Action |
+          |--------|---------|----------------|
+          | SIGINT | Ctrl+C | Terminate |
+          | SIGTSTP | Ctrl+Z | Suspend |
+          | SIGQUIT | Ctrl+\\ | Core dump |
+          | SIGCHLD | Child exits | Ignored |
+          | SIGTTOU | Background writes to terminal | Suspend |
+
+          **setpgid() / setpgrp()**: These system calls set a process's group.
+          The shell typically does:
+          ```c
+          pid = fork();
+          if (pid == 0) {
+              setpgid(0, 0);  // Child becomes its own process group leader
+              exec(...);
+          } else {
+              setpgid(pid, pid);  // Parent also sets it (race condition safety)
+              tcsetpgrp(STDIN_FILENO, pid);  // Give child terminal control
+              waitpid(pid, &status, 0);
+              tcsetpgrp(STDIN_FILENO, getpgrp());  // Take back terminal control
+          }
+          ```
+
+          **SIGCHLD**: Sent to the parent when a child exits. Useful for
+          asynchronously reaping background jobs without polling.
+      test_config:
+        timeout_seconds: 15
+        test_type: "integration"

@@ -1,0 +1,715 @@
+project:
+  id: "build-echo-server"
+  title: "Build Your Own Echo Server"
+  slug: "echo-server"
+  icon: "radio"
+  difficulty: "beginner"
+  estimated_hours: 6
+  prerequisites: []
+  description: |
+    Build a TCP echo server from scratch. An echo server is one of the simplest
+    networked programs you can write, but it teaches you the fundamental building
+    blocks of all network programming: sockets, binding, listening, accepting
+    connections, reading data, and writing responses. By the end, you'll have a
+    concurrent server capable of handling multiple clients under load.
+  concepts:
+    - "TCP sockets"
+    - "Port binding"
+    - "Client-server architecture"
+    - "Connection handling"
+    - "Concurrency"
+    - "Graceful shutdown"
+    - "Network I/O"
+  supported_languages:
+    - python
+    - javascript
+
+  stages:
+    # ──────────────────────────────────────────────
+    # Stage 1: Bind to a Port
+    # ──────────────────────────────────────────────
+    - id: "echo-bind-port"
+      number: 1
+      title: "Bind to a Port"
+      narrative: |
+        Every networked application starts the same way: it needs to claim a port
+        on the machine so the operating system knows where to route incoming traffic.
+
+        Think of a port like a mailbox number in an apartment building. The building
+        is your computer (identified by its IP address), and the port number tells
+        the postal system exactly which apartment should receive the mail. When your
+        server "binds" to a port, it's putting its name on that mailbox.
+
+        Under the hood, your program asks the OS kernel for a **socket** — a file
+        descriptor that represents one endpoint of a network connection. You then
+        associate that socket with an address and port using the `bind` system call,
+        and finally tell the OS you're ready to receive connections with `listen`.
+
+        The port we'll use throughout this project is **4221**. This is an arbitrary
+        high-numbered port that's unlikely to conflict with other services.
+      task: |
+        Create a TCP server that binds to port 4221 on localhost (127.0.0.1) and
+        starts listening for connections. The server should not exit immediately —
+        it must stay running and wait for connections.
+
+        Your program will be tested by checking that something is listening on
+        port 4221 within a few seconds of starting your program.
+      concepts_taught:
+        - "TCP sockets"
+        - "Port binding"
+        - "The listen backlog"
+      hints:
+        - level: 1
+          text: |
+            You need to create a socket, bind it to an address, and start listening.
+            Look up your language's socket or net module.
+        - level: 2
+          text: |
+            In Python, use the `socket` module: create a socket with
+            `socket.socket(socket.AF_INET, socket.SOCK_STREAM)`, then call `.bind()`
+            and `.listen()`. In JavaScript, use the `net` module's
+            `net.createServer()` and `.listen()`.
+        - level: 3
+          text: |
+            Python example skeleton:
+              import socket
+              s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+              s.bind(('127.0.0.1', 4221))
+              s.listen()
+              # Keep the program running...
+      reference_material:
+        title: "TCP Sockets & the BSD Socket API"
+        body: |
+          The Berkeley Sockets API is the standard interface for network
+          programming on virtually every operating system. The key calls for a
+          TCP server are:
+
+          1. **socket()** — Create a new socket file descriptor.
+          2. **bind()** — Associate the socket with a specific IP and port.
+          3. **listen()** — Mark the socket as passive (ready to accept connections).
+          4. **accept()** — Block until a client connects, then return a new socket
+             for that specific connection.
+
+          The `listen()` call takes a **backlog** parameter that controls how many
+          pending connections the OS will queue before refusing new ones. A value
+          of 1-5 is fine for this project.
+
+          **SO_REUSEADDR**: When a server shuts down, the OS keeps the port in a
+          TIME_WAIT state for a while. Setting the SO_REUSEADDR socket option lets
+          you rebind to the port immediately, which is very helpful during
+          development.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 2: Accept a Connection
+    # ──────────────────────────────────────────────
+    - id: "echo-accept-connection"
+      number: 2
+      title: "Accept a Connection"
+      narrative: |
+        Your server is listening, but it's not doing anything with incoming
+        connections yet. When a client connects to your server, the OS completes
+        the TCP three-way handshake behind the scenes and places the new connection
+        in a queue. Your server needs to call `accept` to pull a connection off
+        that queue and get a dedicated socket for communicating with that client.
+
+        The `accept` call is a blocking operation — your program will pause at that
+        line until a client actually connects. When it does, `accept` returns two
+        things: a new socket dedicated to this client, and the client's address
+        information (IP and port).
+
+        This is an important distinction: the **listening socket** stays open and
+        continues to accept new connections, while the **client socket** returned
+        by `accept` is used exclusively for talking to one specific client.
+      task: |
+        Extend your server to accept a single incoming TCP connection. When a
+        client connects, your server should accept the connection and then close
+        it cleanly. The server can exit after handling one connection.
+
+        The test will connect to your server on port 4221 and verify that the
+        connection is accepted (the TCP handshake completes) and then closed
+        gracefully by the server.
+      concepts_taught:
+        - "Accepting connections"
+        - "Client vs. listening sockets"
+        - "TCP three-way handshake"
+      hints:
+        - level: 1
+          text: |
+            After calling `listen()`, you need to call `accept()` on your listening
+            socket. This returns a new socket for the connected client.
+        - level: 2
+          text: |
+            In Python, call `conn, addr = s.accept()` then `conn.close()`.
+            In JavaScript, the callback you pass to `net.createServer()` fires
+            when a client connects — call `socket.end()` to close the connection.
+        - level: 3
+          text: |
+            Python:
+              conn, addr = server_socket.accept()
+              print(f"Connected by {addr}")
+              conn.close()
+
+            JavaScript:
+              const server = net.createServer((socket) => {
+                socket.end();
+              });
+              server.listen(4221, '127.0.0.1');
+      reference_material:
+        title: "The accept() System Call"
+        body: |
+          When `accept()` succeeds, it creates a **new socket** that is connected
+          to the client. The original listening socket is unaffected and can
+          continue to accept more connections.
+
+          The returned client address includes the client's IP and their
+          **ephemeral port** — a temporary port number the OS assigned for that
+          connection on the client side. This is how the OS keeps multiple
+          connections to the same server distinct.
+
+          **Connection lifecycle**:
+          1. Client calls `connect()` → sends SYN
+          2. Server OS responds with SYN-ACK
+          3. Client sends ACK → connection is established
+          4. Server's `accept()` returns the new socket
+          5. Data exchange happens on the new socket
+          6. Either side calls `close()` → sends FIN
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 3: Read Data
+    # ──────────────────────────────────────────────
+    - id: "echo-read-data"
+      number: 3
+      title: "Read Data from the Client"
+      narrative: |
+        Now that you can accept connections, it's time to actually read what the
+        client sends. TCP is a **stream protocol**, which means data arrives as a
+        continuous stream of bytes — there are no built-in message boundaries.
+
+        When you call `recv` (or `read`), the OS gives you whatever bytes have
+        arrived so far, up to the buffer size you specify. You might get all the
+        data the client sent, or just a portion of it. For this stage, we'll keep
+        things simple: the client will send a short message and you just need to
+        read it.
+
+        The buffer size you pass to `recv` determines the maximum number of bytes
+        you'll read in one call. A common choice is 1024 bytes, which is plenty
+        for our purposes. In production servers, buffer sizes are tuned based on
+        expected message sizes and memory constraints.
+      task: |
+        Extend your server to read data from the client after accepting the
+        connection. Read the incoming data and print it to stdout. Then close the
+        connection.
+
+        The test will connect and send the string "Hello, Echo Server!" and verify
+        that your server reads it (by checking stdout output). Your server should
+        print the received data to stdout exactly as received.
+      concepts_taught:
+        - "Reading from sockets"
+        - "TCP as a stream protocol"
+        - "Buffer sizes"
+      hints:
+        - level: 1
+          text: |
+            After accepting the connection, use the client socket's recv/read
+            method to read incoming bytes. Don't forget to decode the bytes to
+            a string if needed.
+        - level: 2
+          text: |
+            In Python, use `data = conn.recv(1024)` then `print(data.decode())`.
+            In JavaScript, listen for the `'data'` event on the socket.
+        - level: 3
+          text: |
+            Python:
+              conn, addr = server_socket.accept()
+              data = conn.recv(1024)
+              print(data.decode(), end='', flush=True)
+              conn.close()
+
+            JavaScript:
+              const server = net.createServer((socket) => {
+                socket.on('data', (data) => {
+                  process.stdout.write(data.toString());
+                  socket.end();
+                });
+              });
+      reference_material:
+        title: "Reading from TCP Streams"
+        body: |
+          TCP provides a reliable, ordered byte stream. Key points:
+
+          - **No message boundaries**: If a client sends "Hello" then "World",
+            you might receive "HelloWorld" in one read, or "Hell" then "oWorld",
+            or any other split. TCP guarantees order, not framing.
+
+          - **recv() may return fewer bytes** than your buffer size. It returns
+            whatever is currently available, up to the buffer limit.
+
+          - **recv() returns 0 bytes** (or empty) when the client has closed
+            their end of the connection. This is how you detect disconnection.
+
+          - **Blocking vs non-blocking**: By default, recv() blocks until at
+            least one byte is available. In non-blocking mode, it returns
+            immediately (possibly with nothing).
+
+          For protocols that need message boundaries, applications typically add
+          their own framing — like HTTP's Content-Length header or newline-
+          delimited messages.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 4: Echo Back
+    # ──────────────────────────────────────────────
+    - id: "echo-echo-back"
+      number: 4
+      title: "Echo the Data Back"
+      narrative: |
+        This is the moment your echo server earns its name! The core behavior of
+        an echo server is beautifully simple: whatever the client sends, send it
+        right back.
+
+        The `send` system call writes data to the socket. Like `recv`, it operates
+        on raw bytes. One subtlety: `send` might not write all your data in one
+        call — it returns the number of bytes actually sent. In practice, for small
+        messages this rarely matters, but robust code should handle partial sends
+        by looping until all data is written (or using `sendall` in Python).
+
+        After this stage, you'll have a functional echo server. You can test it
+        yourself using tools like `nc` (netcat) or `telnet`:
+        ```
+        $ echo "hello" | nc localhost 4221
+        hello
+        ```
+      task: |
+        Extend your server to send back (echo) whatever data it receives from
+        the client. The server should read data from the client and write the
+        exact same bytes back to the client, then close the connection.
+
+        The test will send a random string and verify that the exact same string
+        is received back.
+      concepts_taught:
+        - "Writing to sockets"
+        - "The echo protocol (RFC 862)"
+        - "Partial sends"
+      hints:
+        - level: 1
+          text: |
+            After reading data with recv/read, write the same data back using
+            send/write on the same client socket.
+        - level: 2
+          text: |
+            In Python, use `conn.sendall(data)` to ensure all bytes are sent.
+            In JavaScript, use `socket.write(data)` inside the data event handler.
+        - level: 3
+          text: |
+            Python:
+              data = conn.recv(1024)
+              if data:
+                  conn.sendall(data)
+              conn.close()
+
+            JavaScript:
+              socket.on('data', (data) => {
+                socket.write(data);
+                socket.end();
+              });
+      reference_material:
+        title: "Writing to Sockets & the Echo Protocol"
+        body: |
+          **send() and sendall()**:
+          - `send(data)` writes data to the socket and returns the number of bytes
+            actually sent. This may be fewer than `len(data)` if the OS send buffer
+            is full.
+          - `sendall(data)` (Python) loops internally until all bytes are sent.
+            JavaScript's `socket.write()` handles this automatically with internal
+            buffering.
+
+          **The Echo Protocol (RFC 862)**:
+          The echo protocol is formally defined in RFC 862 (1983). It's one of the
+          simplest Internet protocols: a server listens on a port, and for every
+          byte it receives, it sends that byte back. Despite its simplicity, it's
+          invaluable for testing network connectivity and understanding socket
+          programming fundamentals.
+
+          **Full-duplex communication**:
+          TCP connections are full-duplex, meaning data can flow in both directions
+          simultaneously. Your echo server reads and writes on the same connection.
+      test_config:
+        timeout_seconds: 10
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 5: Handle Multiple Clients
+    # ──────────────────────────────────────────────
+    - id: "echo-multiple-clients"
+      number: 5
+      title: "Handle Multiple Clients"
+      narrative: |
+        Your echo server works, but it has a major limitation: it handles one
+        client and then exits (or at best, handles clients one at a time). A real
+        server needs to keep running and serve many clients, one after another.
+
+        The simplest approach is an **iterative server**: wrap your accept-read-
+        write-close logic in a loop. After finishing with one client, go back to
+        waiting for the next one. This is sequential — while you're handling
+        client A, client B has to wait.
+
+        This pattern is surprisingly useful for low-traffic services, and it's
+        the foundation you'll build concurrency on top of in the next stage.
+      task: |
+        Modify your server to handle multiple clients sequentially. After echoing
+        data back to one client and closing that connection, the server should
+        loop back and accept the next connection. The server should never exit
+        on its own — it keeps running until killed.
+
+        The test will connect 3 clients one after another (not simultaneously).
+        Each will send different data and expect to receive it back.
+      concepts_taught:
+        - "Server event loops"
+        - "Iterative servers"
+        - "Sequential request handling"
+      hints:
+        - level: 1
+          text: |
+            Wrap your accept/read/write/close logic in a `while True` loop (or
+            equivalent infinite loop).
+        - level: 2
+          text: |
+            The structure should be:
+            while True:
+                conn, addr = server.accept()
+                data = conn.recv(1024)
+                conn.sendall(data)
+                conn.close()
+        - level: 3
+          text: |
+            Python:
+              while True:
+                  conn, addr = server_socket.accept()
+                  try:
+                      data = conn.recv(1024)
+                      if data:
+                          conn.sendall(data)
+                  finally:
+                      conn.close()
+
+            In JavaScript, `net.createServer()` already handles this — each new
+            connection fires the callback. Just make sure you don't call
+            `server.close()`.
+      reference_material:
+        title: "Iterative vs. Concurrent Servers"
+        body: |
+          **Iterative server**: Handles one client at a time in a loop. Simple
+          and correct, but clients may experience delays waiting for their turn.
+
+          **Concurrent server**: Handles multiple clients simultaneously using
+          threads, processes, or async I/O. More complex but essential for
+          production use.
+
+          Most real-world servers are concurrent, but understanding the iterative
+          model first makes the motivation for concurrency crystal clear.
+
+          **The accept() loop**: The standard server pattern is:
+          ```
+          while running:
+              client = accept()
+              handle(client)
+              close(client)
+          ```
+
+          JavaScript's event-driven model with `net.createServer()` naturally
+          handles multiple sequential connections because the callback fires for
+          each new connection on the event loop.
+      test_config:
+        timeout_seconds: 15
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 6: Handle Concurrent Clients
+    # ──────────────────────────────────────────────
+    - id: "echo-concurrent-clients"
+      number: 6
+      title: "Handle Concurrent Clients"
+      narrative: |
+        Sequential handling works, but imagine a slow client that takes 10 seconds
+        to send its data. Every other client is stuck waiting. In the real world,
+        servers need to handle many clients at the same time.
+
+        There are several approaches to concurrency:
+
+        1. **Threading**: Spawn a new thread for each client. Each thread handles
+           one connection independently. Simple but uses more memory per connection.
+
+        2. **Forking**: Spawn a new process for each client. Even more isolated but
+           heavier than threads.
+
+        3. **Async I/O / Event loop**: Use non-blocking sockets and an event loop
+           to multiplex many connections on a single thread. This is what Node.js
+           does natively and what Python's `asyncio` provides.
+
+        For this stage, pick whichever approach feels natural for your language.
+        Python developers often reach for threading first. JavaScript developers
+        get concurrency "for free" from the event loop.
+      task: |
+        Modify your server to handle multiple clients concurrently. The server
+        should be able to echo data back to multiple clients that are connected
+        at the same time, without one client blocking another.
+
+        The test will connect 3 clients simultaneously, each sending different data,
+        and verify that all 3 receive their echoed responses within a reasonable
+        time window.
+      concepts_taught:
+        - "Concurrent programming"
+        - "Threading basics"
+        - "Event-driven I/O"
+      hints:
+        - level: 1
+          text: |
+            You need to handle each client connection independently so that one
+            slow client doesn't block others. Consider threads or async I/O.
+        - level: 2
+          text: |
+            In Python, use `import threading` and spawn a new thread for each
+            accepted connection. In JavaScript, your server already handles
+            concurrency via the event loop — just ensure you're not doing any
+            blocking operations.
+        - level: 3
+          text: |
+            Python:
+              import threading
+
+              def handle_client(conn, addr):
+                  try:
+                      data = conn.recv(1024)
+                      if data:
+                          conn.sendall(data)
+                  finally:
+                      conn.close()
+
+              while True:
+                  conn, addr = server_socket.accept()
+                  t = threading.Thread(target=handle_client, args=(conn, addr))
+                  t.start()
+
+            JavaScript already handles this via its event loop model — each
+            connection callback runs independently.
+      reference_material:
+        title: "Concurrency Models for Network Servers"
+        body: |
+          **Thread-per-connection**: The simplest concurrency model. Each `accept()`
+          spawns a new thread to handle that client.
+          - Pros: Simple mental model, easy to code
+          - Cons: Threads have memory overhead (~1-8 MB per thread), context
+            switching costs, shared state bugs
+
+          **Event-driven / async**: A single thread uses `select()`, `poll()`,
+          `epoll()`, or `kqueue()` to monitor many sockets at once.
+          - Pros: Very efficient, handles thousands of connections
+          - Cons: Callback-heavy code, harder to reason about
+
+          **Thread pool**: A fixed number of worker threads pull connections from
+          a queue. Bounds resource usage while maintaining concurrency.
+
+          **The C10K problem**: The challenge of handling 10,000+ concurrent
+          connections pushed the industry toward event-driven models. Node.js
+          was built specifically to address this.
+      test_config:
+        timeout_seconds: 15
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 7: Graceful Shutdown
+    # ──────────────────────────────────────────────
+    - id: "echo-graceful-shutdown"
+      number: 7
+      title: "Graceful Shutdown"
+      narrative: |
+        Right now, killing your server (Ctrl+C) abruptly terminates everything.
+        Any clients mid-conversation get their connections rudely reset. In
+        production, a **graceful shutdown** means:
+
+        1. Stop accepting new connections
+        2. Wait for in-progress connections to finish
+        3. Clean up resources (close sockets, flush buffers)
+        4. Then exit
+
+        This is triggered by signals — specifically **SIGINT** (Ctrl+C) and
+        **SIGTERM** (what process managers like systemd send). Your server should
+        catch these signals and initiate an orderly shutdown instead of dying
+        instantly.
+
+        Graceful shutdown is a hallmark of professional-quality software. It
+        prevents data loss, avoids broken connections, and makes deployments
+        seamless.
+      task: |
+        Add graceful shutdown to your server. When the server receives SIGINT
+        (Ctrl+C) or SIGTERM, it should:
+
+        1. Stop accepting new connections
+        2. Wait for any active client connections to finish (with a timeout of
+           5 seconds)
+        3. Close the listening socket
+        4. Print "Server shut down gracefully" to stdout
+        5. Exit with code 0
+
+        The test will start your server, connect a client, send data mid-stream,
+        then send SIGTERM to the server. It will verify that the active client's
+        echo completes and the shutdown message is printed.
+      concepts_taught:
+        - "Unix signals (SIGINT, SIGTERM)"
+        - "Graceful shutdown patterns"
+        - "Resource cleanup"
+      hints:
+        - level: 1
+          text: |
+            You need to register a signal handler for SIGINT and SIGTERM that
+            sets a flag telling the main loop to stop accepting connections.
+        - level: 2
+          text: |
+            In Python, use the `signal` module to register handlers. Use a
+            threading Event or boolean flag to coordinate shutdown. In JavaScript,
+            listen for `process.on('SIGTERM', ...)` and call `server.close()`.
+        - level: 3
+          text: |
+            Python:
+              import signal, threading
+
+              shutdown_event = threading.Event()
+              active_threads = []
+
+              def shutdown_handler(signum, frame):
+                  shutdown_event.set()
+                  server_socket.close()
+
+              signal.signal(signal.SIGINT, shutdown_handler)
+              signal.signal(signal.SIGTERM, shutdown_handler)
+
+              # In your main loop, check shutdown_event.is_set()
+              # After loop: join active threads with a timeout
+
+            JavaScript:
+              process.on('SIGTERM', () => {
+                server.close(() => {
+                  console.log('Server shut down gracefully');
+                  process.exit(0);
+                });
+              });
+      reference_material:
+        title: "Unix Signals and Graceful Shutdown"
+        body: |
+          **Common signals**:
+          - **SIGINT (2)**: Sent when user presses Ctrl+C. Default: terminate.
+          - **SIGTERM (15)**: Polite termination request. Sent by `kill` command,
+            systemd, Docker, Kubernetes, etc. Default: terminate.
+          - **SIGKILL (9)**: Forceful kill. Cannot be caught or ignored.
+
+          **Graceful shutdown pattern**:
+          ```
+          1. Receive signal
+          2. Set "shutting down" flag
+          3. Stop accept() loop (close listening socket)
+          4. Wait for active handlers to complete (with timeout)
+          5. Close all resources
+          6. Exit cleanly
+          ```
+
+          **Why it matters**:
+          - Zero-downtime deployments: New server starts, old one drains
+          - Data integrity: In-flight requests complete instead of corrupting
+          - Client experience: Connected clients get proper responses
+          - Resource cleanup: File handles, DB connections released properly
+      test_config:
+        timeout_seconds: 15
+        test_type: "integration"
+
+    # ──────────────────────────────────────────────
+    # Stage 8: Stress Test
+    # ──────────────────────────────────────────────
+    - id: "echo-stress-test"
+      number: 8
+      title: "Stress Test"
+      narrative: |
+        Your echo server is feature-complete. Now let's see how it holds up under
+        pressure. A stress test simulates many clients connecting and sending data
+        rapidly. This is where subtle bugs surface — race conditions, resource
+        leaks, and performance bottlenecks.
+
+        Common issues that appear under load:
+        - **File descriptor exhaustion**: Each connection uses a file descriptor.
+          The OS has a per-process limit (often 1024 by default).
+        - **Memory leaks**: Threads or buffers that aren't cleaned up properly.
+        - **Race conditions**: Shared state accessed without proper synchronization.
+        - **Slow accept rate**: If your accept loop is too slow, the listen backlog
+          fills up and new connections are refused.
+
+        This stage won't require changes if your implementation is solid. It's a
+        validation that your server is production-quality.
+      task: |
+        Your server must handle a burst of 50 concurrent clients, each sending a
+        unique message and expecting the correct echo response. All 50 clients
+        will connect within a 1-second window.
+
+        The test will verify:
+        - All 50 clients receive their correct echoed data
+        - No connections are refused or timed out
+        - Total time for all operations completes within 10 seconds
+
+        If your concurrent handling from Stage 6 is solid, this should pass
+        without changes. If it doesn't, look for resource leaks or bottlenecks.
+      concepts_taught:
+        - "Load testing"
+        - "File descriptor limits"
+        - "Resource management under pressure"
+      hints:
+        - level: 1
+          text: |
+            If this test fails, the issue is likely in how you handle concurrent
+            connections. Make sure you're not accidentally serializing clients.
+        - level: 2
+          text: |
+            Common fixes: increase the `listen()` backlog, make sure you close
+            client sockets promptly, ensure threads/handlers don't leak resources.
+            Set SO_REUSEADDR on the server socket.
+        - level: 3
+          text: |
+            Python — ensure you have:
+              server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+              server_socket.listen(128)  # Increase backlog
+
+            Also make sure every client socket is closed in a `finally` block so
+            connections don't leak.
+
+            JavaScript — make sure you're calling `socket.end()` for every
+            connection and not doing any accidental blocking.
+      reference_material:
+        title: "Load Testing and Server Resilience"
+        body: |
+          **File descriptor limits**: Check with `ulimit -n`. Default is often
+          1024. Each socket uses one fd. For 50 concurrent clients you need at
+          least 52 fds (50 clients + listening socket + stdin/stdout/stderr).
+
+          **SO_REUSEADDR**: This socket option lets you rebind to a port that's
+          in TIME_WAIT state. Essential for development and restarts.
+
+          **Listen backlog**: The `listen(backlog)` parameter controls how many
+          connections the OS will queue while you're busy calling `accept()`.
+          Under burst load, a small backlog causes connection refusals.
+
+          **Common performance anti-patterns**:
+          - Creating a new thread for every connection without a pool
+          - Allocating large buffers per-connection unnecessarily
+          - Not closing sockets promptly after use
+          - Catching exceptions too broadly (masking bugs)
+
+          **Monitoring**: In production, you'd track metrics like connections
+          per second, latency percentiles, error rates, and file descriptor usage.
+      test_config:
+        timeout_seconds: 20
+        test_type: "integration"
