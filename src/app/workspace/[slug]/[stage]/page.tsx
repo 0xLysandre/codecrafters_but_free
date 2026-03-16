@@ -17,12 +17,9 @@ import {
   RotateCcw,
   Loader2,
   Clock,
-  MemoryStick,
-  Maximize2,
-  Minimize2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Language } from "@/types";
+import type { Language, StageInfo, Hint, ReferenceMaterial } from "@/types";
 import { LANGUAGE_CONFIG } from "@/types";
 
 interface TestResult {
@@ -35,77 +32,11 @@ interface TestResult {
   hint?: string;
 }
 
-// Demo stage data
-const STAGE_DATA: Record<string, Record<number, {
-  title: string;
-  narrative: string;
-  task: string;
-  hints: { level: number; text: string }[];
-  reference: { title: string; body: string } | null;
-  starterCode: Record<string, string>;
-}>> = {
-  "echo-server": {
-    1: {
-      title: "Bind to a Port",
-      narrative:
-        "Every network server starts the same way: by claiming a port number and listening for connections. When your server binds to port 4221, it tells the operating system \"I want to receive any TCP traffic directed at this port.\"\n\nThis is the foundation of all networked software. Web servers bind to port 80 or 443. Redis binds to 6379. Your echo server will bind to 4221.\n\nIn this stage, you'll create the simplest possible TCP server — one that just binds to a port and accepts a single connection.",
-      task: "Create a TCP server that:\n- Binds to port 4221 on localhost\n- Listens for incoming connections\n- Accepts at least one TCP connection\n- Closes the connection gracefully",
-      hints: [
-        {
-          level: 1,
-          text: "Look up how to create a TCP/socket server in your language. The key operations are: create socket, bind, listen, accept.",
-        },
-        {
-          level: 2,
-          text: "In Python, use the `socket` module. Create a socket with `socket.socket(socket.AF_INET, socket.SOCK_STREAM)`, then call `bind(('localhost', 4221))`, `listen()`, and `accept()`.",
-        },
-        {
-          level: 3,
-          text: "Here's the structure:\n```\n1. Create a TCP socket (AF_INET, SOCK_STREAM)\n2. Set SO_REUSEADDR option (prevents 'address already in use')\n3. Bind to ('localhost', 4221)\n4. Call listen()\n5. Call accept() to wait for a connection\n6. Close the connection and socket\n```",
-        },
-      ],
-      reference: {
-        title: "TCP Sockets 101",
-        body: "TCP (Transmission Control Protocol) provides reliable, ordered communication between two programs over a network. A server 'binds' to a port number and 'listens' for incoming connections. When a client connects, the server 'accepts' the connection, creating a dedicated two-way communication channel.\n\nThe typical server lifecycle:\n1. **socket()** — Create an endpoint for communication\n2. **bind()** — Associate the socket with a specific port\n3. **listen()** — Mark the socket as passive (ready to accept)\n4. **accept()** — Wait for and accept a connection\n5. **read/write** — Exchange data with the client\n6. **close()** — Tear down the connection",
-      },
-      starterCode: {
-        python:
-          'import socket\n\n\ndef main():\n    # TODO: Create a TCP server that binds to port 4221\n    # and accepts at least one incoming connection.\n    #\n    # Steps:\n    # 1. Create a TCP socket\n    # 2. Bind it to ("localhost", 4221)\n    # 3. Start listening for connections\n    # 4. Accept a connection\n    # 5. Close the connection\n    print("Server starting...")\n\n\nif __name__ == "__main__":\n    main()\n',
-        javascript:
-          'const net = require("net");\n\nfunction main() {\n  // TODO: Create a TCP server that binds to port 4221\n  // and accepts at least one incoming connection.\n  //\n  // Steps:\n  // 1. Create a TCP server using net.createServer()\n  // 2. Listen on port 4221\n  // 3. Handle the "connection" event\n  // 4. Close the connection when done\n  console.log("Server starting...");\n}\n\nmain();\n',
-        go: 'package main\n\nimport (\n\t"fmt"\n)\n\nfunc main() {\n\t// TODO: Create a TCP server that binds to port 4221\n\t// and accepts at least one incoming connection.\n\t//\n\t// Steps:\n\t// 1. Use net.Listen("tcp", "localhost:4221")\n\t// 2. Accept a connection with listener.Accept()\n\t// 3. Close the connection\n\tfmt.Println("Server starting...")\n}\n',
-        rust: 'use std::net::TcpListener;\n\nfn main() {\n    // TODO: Create a TCP server that binds to port 4221\n    // and accepts at least one incoming connection.\n    //\n    // Steps:\n    // 1. Use TcpListener::bind("localhost:4221")\n    // 2. Accept a connection with listener.accept()\n    // 3. The connection is automatically closed when dropped\n    println!("Server starting...");\n}\n',
-      },
-    },
-    2: {
-      title: "Accept a Connection",
-      narrative:
-        "Now that your server can bind to a port, it's time to actually do something when a client connects. In this stage, you'll accept the connection and keep the server running so it can handle more connections in the future.\n\nA real echo server needs to stay alive — it doesn't quit after one connection. You'll modify your server to accept connections in a loop.",
-      task: "Modify your server to:\n- Accept connections in a loop (don't exit after one connection)\n- Print a message when a client connects\n- Close each connection after accepting it\n- Keep the server running until manually stopped",
-      hints: [
-        {
-          level: 1,
-          text: "Wrap your accept() call in an infinite loop. After accepting a connection, close it and loop back to accept the next one.",
-        },
-        {
-          level: 2,
-          text: "In Python: `while True: conn, addr = server.accept(); print(f'Connected: {addr}'); conn.close()`",
-        },
-        {
-          level: 3,
-          text: "Make sure you:\n1. Use a `while True` loop around `accept()`\n2. Close each connection after accepting\n3. Don't close the server socket inside the loop",
-        },
-      ],
-      reference: null,
-      starterCode: {
-        python:
-          'import socket\n\n\ndef main():\n    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n    server.bind(("localhost", 4221))\n    server.listen()\n    print("Server listening on port 4221...")\n\n    # TODO: Accept connections in a loop\n    # For each connection:\n    #   1. Print that a client connected\n    #   2. Close the connection\n    #   3. Continue accepting more connections\n    conn, addr = server.accept()\n    conn.close()\n    server.close()\n\n\nif __name__ == "__main__":\n    main()\n',
-        javascript:
-          'const net = require("net");\n\nfunction main() {\n  // TODO: Accept connections and keep the server running.\n  // The server should not exit after one connection.\n  const server = net.createServer((connection) => {\n    console.log("Client connected");\n    // TODO: Handle the connection\n    connection.end();\n  });\n\n  server.listen(4221, "localhost", () => {\n    console.log("Server listening on port 4221...");\n  });\n}\n\nmain();\n',
-      },
-    },
-  },
-};
+interface StarterCodeEntry {
+  language: string;
+  files: Record<string, string>;
+  buildCommand: string | null;
+}
 
 export default function WorkspacePage() {
   const params = useParams();
@@ -114,10 +45,14 @@ export default function WorkspacePage() {
   const stageNum = parseInt(params.stage as string, 10);
   const lang = (searchParams.get("lang") || "python") as Language;
 
-  const stageData = STAGE_DATA[slug]?.[stageNum];
   const langConfig = LANGUAGE_CONFIG[lang];
 
-  const [code, setCode] = useState(stageData?.starterCode[lang] || "// Loading...");
+  const [stageData, setStageData] = useState<StageInfo | null>(null);
+  const [starterCode, setStarterCode] = useState<StarterCodeEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [code, setCode] = useState("// Loading...");
   const [isRunning, setIsRunning] = useState(false);
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [stdout, setStdout] = useState("");
@@ -127,9 +62,46 @@ export default function WorkspacePage() {
   const [revealedHints, setRevealedHints] = useState<Set<number>>(new Set());
   const [showReference, setShowReference] = useState(false);
   const [activeTab, setActiveTab] = useState<"results" | "stdout" | "stderr">("results");
-  const [leftPanelWidth, setLeftPanelWidth] = useState(30);
-  const [rightPanelWidth, setRightPanelWidth] = useState(25);
+  const [leftPanelWidth] = useState(30);
+  const [rightPanelWidth] = useState(25);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+
+  // Fetch stage data from API
+  useEffect(() => {
+    async function fetchStage() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/projects/${slug}/stages/${stageNum}`);
+        if (!res.ok) {
+          const data = await res.json();
+          setError(data.error || "Failed to load stage");
+          return;
+        }
+        const data = await res.json();
+        setStageData(data.stage);
+        setStarterCode(data.starterCode || []);
+
+        // Set initial code from starter code for selected language
+        const langStarter = (data.starterCode as StarterCodeEntry[])?.find(
+          (sc) => sc.language === lang
+        );
+        if (langStarter) {
+          const firstFile = Object.values(langStarter.files)[0];
+          setCode(firstFile as string);
+        } else {
+          // No starter code for this language — provide a minimal template
+          const ext = LANGUAGE_CONFIG[lang]?.extension || "";
+          setCode(`// No starter code available for ${LANGUAGE_CONFIG[lang]?.name || lang}.\n// Write your solution here.\n`);
+        }
+      } catch {
+        setError("Failed to load stage. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchStage();
+  }, [slug, stageNum, lang]);
 
   const runTests = useCallback(async () => {
     setIsRunning(true);
@@ -139,56 +111,45 @@ export default function WorkspacePage() {
     setAllPassed(false);
     setActiveTab("results");
 
-    // Simulate test execution
-    await new Promise((r) => setTimeout(r, 500));
-
-    const mockResults: TestResult[] = [
-      {
-        name: `Server binds to port 4221`,
-        passed: code.includes("4221"),
-        timeMs: 45,
-        ...(code.includes("4221")
-          ? {}
-          : {
-              error:
-                "Could not connect to localhost:4221. Your server doesn't appear to be listening.",
-              expected: "TCP connection accepted on port 4221",
-              actual: "Connection refused (errno 111)",
-              hint: "Make sure your server binds to port 4221 and calls listen() before accept().",
-            }),
-      },
-      {
-        name: `Server accepts TCP connection`,
-        passed: code.includes("accept") || code.includes("createServer"),
-        timeMs: 12,
-        ...(code.includes("accept") || code.includes("createServer")
-          ? {}
-          : {
-              error:
-                "Server bound to port but did not accept the connection within 5 seconds.",
-              expected: "Connection accepted",
-              actual: "Connection timed out",
-              hint: "After listen(), you need to call accept() to actually accept incoming connections.",
-            }),
-      },
-    ];
-
-    if (stageNum >= 2) {
-      mockResults.push({
-        name: `Server stays alive after first connection`,
-        passed: code.includes("while") || code.includes("loop") || code.includes("createServer"),
-        timeMs: 200,
+    try {
+      const res = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug,
+          stageNumber: stageNum,
+          language: lang,
+          files: { [`main${langConfig.extension}`]: code },
+        }),
       });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setTestResults([{
+          name: "Execution",
+          passed: false,
+          error: data.error || "Failed to run tests",
+        }]);
+        setIsRunning(false);
+        return;
+      }
+
+      setTestResults(data.tests || []);
+      setStdout(data.stdout || "");
+      setStderr(data.stderr || "");
+      setExecutionTime(data.executionTimeMs || null);
+      setAllPassed(data.passed || false);
+    } catch {
+      setTestResults([{
+        name: "Execution",
+        passed: false,
+        error: "Network error. Please try again.",
+      }]);
     }
 
-    const passed = mockResults.every((r) => r.passed);
-
-    setTestResults(mockResults);
-    setStdout("Server starting...\nListening on port 4221...");
-    setExecutionTime(mockResults.reduce((sum, r) => sum + (r.timeMs || 0), 0));
-    setAllPassed(passed);
     setIsRunning(false);
-  }, [code, stageNum]);
+  }, [code, slug, stageNum, lang, langConfig.extension]);
 
   // Keyboard shortcut
   useEffect(() => {
@@ -212,16 +173,28 @@ export default function WorkspacePage() {
   };
 
   const resetCode = () => {
-    if (stageData?.starterCode[lang]) {
-      setCode(stageData.starterCode[lang]);
+    const langStarter = starterCode.find((sc) => sc.language === lang);
+    if (langStarter) {
+      const firstFile = Object.values(langStarter.files)[0];
+      setCode(firstFile as string);
     }
   };
 
-  if (!stageData) {
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-forge-400 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !stageData) {
     return (
       <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-xl font-bold text-white mb-2">Stage Not Found</h1>
+          <h1 className="text-xl font-bold text-white mb-2">
+            {error || "Stage Not Found"}
+          </h1>
           <Link href="/dashboard" className="text-forge-400 hover:underline">
             Back to Dashboard
           </Link>
@@ -314,7 +287,7 @@ export default function WorkspacePage() {
                 Your Task
               </h3>
               <div className="text-sm text-zinc-300 whitespace-pre-line">
-                {stageData.task}
+                {stageData.taskDescription}
               </div>
             </div>
 
@@ -356,14 +329,14 @@ export default function WorkspacePage() {
             </div>
 
             {/* Reference Material */}
-            {stageData.reference && (
+            {stageData.referenceMaterial && (
               <div>
                 <button
                   onClick={() => setShowReference(!showReference)}
                   className="flex items-center gap-1.5 text-sm font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
                 >
                   <BookOpen className="w-4 h-4" />
-                  {stageData.reference.title}
+                  {stageData.referenceMaterial.title}
                   {showReference ? (
                     <ChevronUp className="w-4 h-4" />
                   ) : (
@@ -372,7 +345,7 @@ export default function WorkspacePage() {
                 </button>
                 {showReference && (
                   <div className="mt-2 p-4 rounded-lg bg-zinc-900/50 border border-zinc-800 text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
-                    {stageData.reference.body}
+                    {stageData.referenceMaterial.body}
                   </div>
                 )}
               </div>

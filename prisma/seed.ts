@@ -267,6 +267,190 @@ async function main() {
     },
   });
 
+  await prisma.starterCode.upsert({
+    where: { stageId_language: { stageId: "echo-bind-port", language: "c" } },
+    update: {},
+    create: {
+      stageId: "echo-bind-port",
+      language: "c",
+      files: JSON.stringify({
+        "main.c": '#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <sys/socket.h>\n#include <netinet/in.h>\n#include <unistd.h>\n\nint main() {\n    // TODO: Create a TCP server that binds to port 4221\n    // and accepts at least one incoming connection.\n    //\n    // Steps:\n    // 1. Create a TCP socket with socket(AF_INET, SOCK_STREAM, 0)\n    // 2. Set SO_REUSEADDR with setsockopt()\n    // 3. Bind to port 4221 with bind()\n    // 4. Listen with listen()\n    // 5. Accept a connection with accept()\n    // 6. Close the connection and socket\n    printf("Server starting...\\n");\n    return 0;\n}\n',
+      }),
+    },
+  });
+
+  // ── Shell project stages ─────────────────────────────────────────
+
+  const shellStages = [
+    {
+      id: "shell-print-prompt",
+      number: 1,
+      title: "Print a Prompt",
+      narrative:
+        "Every shell begins with a prompt — that little marker that tells you the shell is ready for input. It might be a simple \"$ \" or something elaborate, but it signals: \"I'm listening.\"",
+      taskDescription:
+        "Create a program that:\n- Prints a shell prompt (\"$ \")\n- Waits for user input\n- Exits after receiving one line of input",
+      hints: [
+        { level: 1, text: "Print \"$ \" to stdout (without a newline), then read a line from stdin." },
+        { level: 2, text: "In C: printf(\"$ \"); then use fgets() or getline() to read input." },
+        { level: 3, text: "printf(\"$ \"); fflush(stdout); char buf[1024]; fgets(buf, sizeof(buf), stdin);" },
+      ],
+      conceptsTaught: ["Standard I/O", "Prompts", "User input"],
+      testConfig: { timeout_seconds: 10, test_type: "integration", test_script: "01-print-prompt.sh" },
+    },
+    {
+      id: "shell-repl",
+      number: 2,
+      title: "Read-Eval-Print Loop",
+      narrative:
+        "A shell that quits after one command isn't very useful. Real shells run in a loop: print prompt, read input, process it, repeat. This is the REPL — Read, Eval, Print, Loop.",
+      taskDescription:
+        "Modify your shell to:\n- Print the prompt repeatedly\n- Read user input in a loop\n- Echo the input back (for now)\n- Exit when the user types \"exit 0\"",
+      hints: [
+        { level: 1, text: "Wrap your prompt + read in a while loop. Check if the input is \"exit 0\" to break." },
+        { level: 2, text: "while (1) { printf(\"$ \"); read input; if input == \"exit 0\": break; print input; }" },
+        { level: 3, text: "Remember to strip the trailing newline from fgets() input before comparing." },
+      ],
+      conceptsTaught: ["REPL pattern", "Loop control", "String comparison"],
+      testConfig: { timeout_seconds: 10, test_type: "integration", test_script: "02-repl.sh" },
+    },
+    {
+      id: "shell-run-program",
+      number: 3,
+      title: "Run a Program",
+      narrative:
+        "The core job of a shell is to run programs. When you type \"ls\" or \"cat\", the shell creates a new process, executes the program, and waits for it to finish.",
+      taskDescription:
+        "Modify your shell to:\n- Parse the command name and arguments\n- Search for the program in PATH\n- Execute it using fork() and exec()\n- Wait for the program to finish\n- Print an error if the command is not found",
+      hints: [
+        { level: 1, text: "Use fork() to create a child process, then execvp() to run the command in the child." },
+        { level: 2, text: "Split the input into tokens (command + args). In the child: execvp(args[0], args). In the parent: waitpid()." },
+        { level: 3, text: "Use strtok() to split input. fork() returns 0 in child. Call execvp() in child, waitpid() in parent. If execvp fails, print \"command not found\"." },
+      ],
+      conceptsTaught: ["fork()", "exec()", "waitpid()", "PATH resolution"],
+      testConfig: { timeout_seconds: 10, test_type: "integration", test_script: "03-run-program.sh" },
+    },
+    {
+      id: "shell-builtins",
+      number: 4,
+      title: "Built-in Commands",
+      narrative:
+        "Some commands can't be external programs — they need to modify the shell's own state. \"cd\" changes the shell's working directory, \"exit\" terminates the shell. These are built-in commands.",
+      taskDescription:
+        "Add these built-in commands:\n- \"exit <code>\" — exit the shell with the given status code\n- \"echo <text>\" — print the arguments\n- \"type <cmd>\" — print whether a command is a builtin or where it's found in PATH\n- \"cd <dir>\" — change the working directory",
+      hints: [
+        { level: 1, text: "Before trying fork/exec, check if the command matches a builtin name." },
+        { level: 2, text: "For cd: use chdir(). For type: check builtins first, then search PATH directories." },
+        { level: 3, text: "Check command against builtin list. For 'type': if builtin print 'is a shell builtin', else search each PATH dir for the executable." },
+      ],
+      conceptsTaught: ["Built-in commands", "chdir()", "PATH searching"],
+      testConfig: { timeout_seconds: 10, test_type: "integration", test_script: "04-builtins.sh" },
+    },
+    {
+      id: "shell-quoting",
+      number: 5,
+      title: "Quoting & Escaping",
+      narrative:
+        "What happens when you type: echo \"hello   world\"? Without proper quoting support, the shell would treat each space-separated word as a separate argument. Quoting lets users pass arguments containing spaces and special characters.",
+      taskDescription:
+        "Add support for:\n- Single quotes: preserve everything literally\n- Double quotes: preserve spaces, allow some escapes\n- Backslash: escape the next character",
+      hints: [
+        { level: 1, text: "Write a custom tokenizer instead of using simple strtok(). Track whether you're inside quotes." },
+        { level: 2, text: "Walk through the input char by char. If you see a quote, toggle quote mode and don't split on spaces until the closing quote." },
+        { level: 3, text: "Single quotes: copy everything verbatim until closing quote. Double quotes: handle \\\\, \\\", \\$, \\n. Backslash outside quotes: skip backslash, copy next char." },
+      ],
+      conceptsTaught: ["Lexical analysis", "Quoting rules", "Escape sequences"],
+      testConfig: { timeout_seconds: 10, test_type: "integration", test_script: "05-quoting.sh" },
+    },
+    {
+      id: "shell-redirections",
+      number: 6,
+      title: "Redirections",
+      narrative:
+        "Redirections let you control where a program's input and output go. \"ls > file.txt\" sends output to a file instead of the terminal. This is one of the most powerful features of Unix shells.",
+      taskDescription:
+        "Add support for:\n- Output redirection: cmd > file (truncate)\n- Append redirection: cmd >> file\n- Input redirection: cmd < file\n- Stderr redirection: cmd 2> file",
+      hints: [
+        { level: 1, text: "After parsing, look for >, >>, <, 2> tokens. Open the target file and use dup2() to redirect." },
+        { level: 2, text: "In the child process (after fork, before exec): open() the file, then dup2(fd, STDOUT_FILENO) for >, or dup2(fd, STDIN_FILENO) for <." },
+        { level: 3, text: "Parse redirections from the arg list. For >: open(file, O_WRONLY|O_CREAT|O_TRUNC, 0644), dup2(fd, 1). For >>: use O_APPEND. For 2>: dup2(fd, 2). For <: open O_RDONLY, dup2(fd, 0)." },
+      ],
+      conceptsTaught: ["File descriptors", "dup2()", "I/O redirection"],
+      testConfig: { timeout_seconds: 10, test_type: "integration", test_script: "06-redirections.sh" },
+    },
+    {
+      id: "shell-pipes",
+      number: 7,
+      title: "Pipes",
+      narrative:
+        "Pipes connect the output of one program to the input of another: \"cat file | grep pattern | wc -l\". This is the Unix philosophy in action — small programs composed together.",
+      taskDescription:
+        "Add support for:\n- Single pipes: cmd1 | cmd2\n- Multiple pipes: cmd1 | cmd2 | cmd3\n- Pipes combined with redirections",
+      hints: [
+        { level: 1, text: "Split the command line on | characters. For each pair, use pipe() to create a pipe, fork both processes, and connect them with dup2()." },
+        { level: 2, text: "For cmd1 | cmd2: pipe(fds), fork cmd1 with dup2(fds[1], STDOUT), fork cmd2 with dup2(fds[0], STDIN), close unused ends, waitpid both." },
+        { level: 3, text: "For N commands: create N-1 pipes. For command i: if i > 0, dup2(pipes[i-1][0], STDIN). If i < N-1, dup2(pipes[i][1], STDOUT). Close all pipe fds in all processes." },
+      ],
+      conceptsTaught: ["pipe()", "Process pipelines", "Unix philosophy"],
+      testConfig: { timeout_seconds: 15, test_type: "integration", test_script: "07-pipes.sh" },
+    },
+  ];
+
+  for (const stage of shellStages) {
+    await prisma.stage.upsert({
+      where: { id: stage.id },
+      update: {},
+      create: {
+        id: stage.id,
+        projectId: "build-shell",
+        number: stage.number,
+        title: stage.title,
+        narrative: stage.narrative,
+        taskDescription: stage.taskDescription,
+        hints: JSON.stringify(stage.hints),
+        testConfig: JSON.stringify(stage.testConfig),
+        conceptsTaught: JSON.stringify(stage.conceptsTaught),
+      },
+    });
+  }
+
+  // Shell starter code — Stage 1 in multiple languages
+  await prisma.starterCode.upsert({
+    where: { stageId_language: { stageId: "shell-print-prompt", language: "c" } },
+    update: {},
+    create: {
+      stageId: "shell-print-prompt",
+      language: "c",
+      files: JSON.stringify({
+        "main.c": '#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\nint main() {\n    // TODO: Print a shell prompt and wait for input.\n    //\n    // Steps:\n    // 1. Print "$ " to stdout (no newline)\n    // 2. Flush stdout\n    // 3. Read a line of input from stdin\n    printf("Server starting...\\n");\n    return 0;\n}\n',
+      }),
+    },
+  });
+
+  await prisma.starterCode.upsert({
+    where: { stageId_language: { stageId: "shell-print-prompt", language: "python" } },
+    update: {},
+    create: {
+      stageId: "shell-print-prompt",
+      language: "python",
+      files: JSON.stringify({
+        "main.py": 'import sys\n\n\ndef main():\n    # TODO: Print a shell prompt and wait for input.\n    #\n    # Steps:\n    # 1. Print "$ " to stdout (no newline)\n    # 2. Flush stdout\n    # 3. Read a line of input from stdin\n    pass\n\n\nif __name__ == "__main__":\n    main()\n',
+      }),
+    },
+  });
+
+  await prisma.starterCode.upsert({
+    where: { stageId_language: { stageId: "shell-print-prompt", language: "javascript" } },
+    update: {},
+    create: {
+      stageId: "shell-print-prompt",
+      language: "javascript",
+      files: JSON.stringify({
+        "main.js": 'const readline = require("readline");\n\nfunction main() {\n  // TODO: Print a shell prompt and wait for input.\n  //\n  // Steps:\n  // 1. Print "$ " to stdout (no newline)\n  // 2. Read a line of input from stdin\n  console.log("Starting...");\n}\n\nmain();\n',
+      }),
+    },
+  });
+
   // Create badges
   const badges = [
     { id: "echo-chamber", title: "Echo Chamber", description: "Complete Build Your Own Echo Server", icon: "📡", criteriaType: "project_complete", criteriaConfig: JSON.stringify({ projectId: "build-echo-server" }) },
