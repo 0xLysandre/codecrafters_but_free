@@ -109,15 +109,15 @@ fi
 # ── Set up database ─────────────────────────────────────────────────
 
 log "Generating Prisma client..."
-npx prisma generate --no-hints 2>&1 | tail -2
+npx prisma generate --no-hints
 log "Prisma client generated ✓"
 
 log "Pushing database schema..."
-npx prisma db push --skip-generate --accept-data-loss 2>&1 | tail -3
+npx prisma db push --skip-generate --accept-data-loss
 log "Database schema applied ✓"
 
 log "Seeding database..."
-npx tsx prisma/seed.ts 2>&1
+npx tsx prisma/seed.ts
 log "Database seeded ✓"
 
 # ── Start development server ────────────────────────────────────────
